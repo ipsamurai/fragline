@@ -1,0 +1,21 @@
+# Godot / build output
+.godot/
+build/
+*.tmp
+
+# OS / tooling
+.DS_Store
+__pycache__/
+*.pyc
+.claude/
+.vscode/
+.idea/
+
+# Internal planning docs: kept locally, never published
+ROADMAP.md
+PLAN*.md
+BLUEPRINT*.md
+NOTES*.md
+TODO*.md
+docs/internal/
+planning/
