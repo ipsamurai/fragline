@@ -88,15 +88,6 @@ static func fore_offset(wid: int) -> Vector2:
 	return FORE[i] - GRIP[i]
 
 
-## Draw weapon `wid` with its grip at `pos`, rotated by `angle`, scaled by `scale`;
-## flip_v mirrors for left-facing aim. NOTE: sets the canvas item's draw transform and resets
-## it to identity afterwards (use draw_xf to compose with an existing transform).
-static func draw(ci: CanvasItem, wid: int, pos: Vector2, angle: float, scale := 1.0, flip_v := false, modulate := Color.WHITE) -> void:
-	ci.draw_set_transform(pos, angle, Vector2(scale, -scale if flip_v else scale))
-	_blit(ci, wid, modulate)
-	ci.draw_set_transform_matrix(Transform2D.IDENTITY)
-
-
 ## Draw with the grip at the origin of `xf` (native px units, +x along the barrel).
 ## Leaves `xf` as the current draw transform.
 static func draw_xf(ci: CanvasItem, wid: int, xf: Transform2D, modulate := Color.WHITE) -> void:

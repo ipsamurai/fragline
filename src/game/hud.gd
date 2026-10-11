@@ -116,7 +116,7 @@ func hit_marker(head: bool) -> void:
 
 ## Announcer line for "you" (never for the menu's background match).
 ## End-of-match lines (show_end) are always CRITICAL.
-func _announce(text: String, prio := Announcer.NORMAL) -> void:
+func announce(text: String, prio := Announcer.NORMAL) -> void:
 	if not world.demo:
 		Announcer.say(text, Announcer.CRITICAL if _show_end else prio)
 
@@ -188,26 +188,26 @@ func on_death(victim: int, killer: int, wid: int) -> void:
 		if first_blood:
 			done = true
 			message("FIRST BLOOD", sub, Color("ff4d6d"), 2.4, 3, 3)
-			_announce("First blood!", Announcer.HIGH)
+			announce("First blood!", Announcer.HIGH)
 		elif SPREES.has(_spree):
 			done = true
 			message(SPREES[_spree], "%d frags without dying" % _spree, SPREE_COL[_spree], 2.6, 3, 3)
-			_announce(SPREE_SAY[_spree], Announcer.HIGH)
+			announce(SPREE_SAY[_spree], Announcer.HIGH)
 		if _multi >= 2:
 			if not done and message(MULTI[mi], sub, MULTI_COL[mi], 2.2, 3, 2):
 				_msg_shake = 2.0 + 2.0 * mi             # MONSTER KILL rattles hardest
 			done = true
-			_announce(MULTI_SAY[mi], Announcer.HIGH)
+			announce(MULTI_SAY[mi], Announcer.HIGH)
 		if _was_headshot(victim, killer):
 			if not done:
 				message("HEADSHOT", sub, Color("fff3b0"), 1.8, 2, 1)
 			done = true
-			_announce("Headshot!")
+			announce("Headshot!")
 		if wid == Weapons.ENFORCER and r.has(victim) and int(r[victim].kills) >= 5:
 			if not done:
 				message("HUMILIATION", sub, Color("ff8fd8"), 2.0, 2, 1)
 			done = true
-			_announce("Humiliation!")
+			announce("Humiliation!")
 		if not done:
 			message(sub, "", Color.WHITE, 1.6, 1, 0)
 		shown = _msg_t > 0.0
@@ -218,11 +218,11 @@ func on_death(victim: int, killer: int, wid: int) -> void:
 	if not lead.is_empty():
 		extra = lead[0]
 		extra_col = lead[2]
-		_announce(lead[1])
+		announce(lead[1])
 	var remain := _frags_remaining_check()
 	if not remain.is_empty():
 		extra = remain[0] if extra == "" else extra + "  ·  " + remain[0]
-		_announce(remain[1])
+		announce(remain[1])
 	if extra != "":
 		if shown:
 			_msg_sub = extra if _msg_sub == "" else _msg_sub + "  ·  " + extra
@@ -236,8 +236,13 @@ func note_headshot(victim: int, attacker: int) -> void:
 	_head_at[victim] = world.clock
 
 
+## `killer` landed a headshot on `victim` within HEAD_WINDOW (see note_headshot()).
+func headshot_noted(victim: int, killer: int) -> bool:
+	return _head_by.get(victim, 0) == killer and world.clock - float(_head_at.get(victim, -1e9)) <= HEAD_WINDOW
+
+
 func _was_headshot(victim: int, killer: int) -> bool:
-	if _head_by.get(victim, 0) == killer and world.clock - float(_head_at.get(victim, -1e9)) <= HEAD_WINDOW:
+	if headshot_noted(victim, killer):
 		return true
 	return _hit_head and _hit_t > 0.15          # fallback: hit_marker() just flagged our headshot
 
@@ -289,12 +294,12 @@ func time_warnings(left: float) -> void:
 		var th: float = tc[0]
 		if prev > th and left <= th and world.time_limit > th + 1.0:
 			message(tc[1], "", Color("ffd166"), 2.2, 2, 1)
-			_announce(tc[2])
+			announce(tc[2])
 			return
 	var n := ceili(left)
 	if n >= 1 and n <= 10 and ceili(prev) > n:
 		message(str(n), "", Color("ff4d6d"), 0.9, 0, 1)
-		_announce(COUNT_SAY[n], Announcer.LOW)
+		announce(COUNT_SAY[n], Announcer.LOW)
 
 
 func show_end(winner: int) -> void:
@@ -302,13 +307,13 @@ func show_end(winner: int) -> void:
 	if _pause.visible:                              # LAN: the match ended under the pause menu
 		_pause.visible = false
 		world.set_paused(false)
-	var name: String = world.roster.get(winner, {"name": "?"}).name
+	var wname: String = world.roster.get(winner, {"name": "?"}).name
 	if winner == 0:
 		message("DRAW", "nobody takes it", Color("ffd166"), 1e9)
-		_announce("Draw!")
+		announce("Draw!")
 	else:
-		message("VICTORY" if winner == world.my_eid else "%s WINS" % name.to_upper(), "", Color("ffd166"), 1e9)
-		_announce("Flawless victory!" if winner == world.my_eid and world.roster.get(winner, {}).get("deaths", 1) == 0
+		message("VICTORY" if winner == world.my_eid else "%s WINS" % wname.to_upper(), "", Color("ffd166"), 1e9)
+		announce("Flawless victory!" if winner == world.my_eid and world.roster.get(winner, {}).get("deaths", 1) == 0
 				else ("Victory!" if winner == world.my_eid else "You have lost the match."))
 	_sfx("pickup_power")
 	_results.visible = true
@@ -332,7 +337,7 @@ func _focus_again() -> void:
 # --- post-match results panel (built once, in show_end) ---------------------------------
 
 const RES_REVEAL := 1.0                       # real seconds of headline + scoreboard before the panel
-const RES_GOLD := Color("ffc93c")
+const RES_GOLD := UiTheme.GOLD
 const RES_RED := Color("ff4d6d")
 var _res_root: Control
 var _res_again: Button
@@ -491,9 +496,9 @@ func _build_results(winner: int) -> void:
 			strip.alignment = BoxContainer.ALIGNMENT_CENTER
 			strip.add_theme_constant_override("separation", 14)
 			for a: Dictionary in aw:
-				var wrap := _res_award_card(st, a, aw.size())
-				strip.add_child(wrap)
-				cards.append(wrap.get_child(0))
+				var holder := _res_award_card(st, a, aw.size())
+				strip.add_child(holder)
+				cards.append(holder.get_child(0))
 			col.add_child(strip)
 	else:
 		var spacer := Control.new()
@@ -712,13 +717,13 @@ func _res_personal(st: MatchStats) -> Control:
 func _res_award_card(st: MatchStats, a: Dictionary, count: int) -> Control:
 	var acol: Color = a.color
 	var mine: bool = a.eid == world.my_eid
-	var wrap := Control.new()
-	wrap.custom_minimum_size = Vector2(260 if count <= 3 else 238, 92)
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(260 if count <= 3 else 238, 92)
 	var card := PanelContainer.new()
 	card.set_anchors_preset(Control.PRESET_FULL_RECT)
 	card.add_theme_stylebox_override("panel", _res_box(Color(acol, 0.12) if mine else Color(0.035, 0.05, 0.095, 0.96),
 			Color(acol, 0.55), 10, 10.0, 3, Color(acol, 0.28 if mine else 0.14)))
-	wrap.add_child(card)
+	holder.add_child(card)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 10)
 	card.add_child(h)
@@ -737,7 +742,7 @@ func _res_award_card(st: MatchStats, a: Dictionary, count: int) -> Control:
 	v.add_child(_res_label(a.value, 12, Color(1, 1, 1, 0.6)))
 	h.add_child(v)
 	card.modulate.a = 0.0
-	return wrap
+	return holder
 
 
 ## Sequenced reveal on real time (the finale slow-mo scales game time).
@@ -1277,7 +1282,7 @@ func _draw_score(c: Control, _size: Vector2) -> void:
 	if rank != _sc_rank or n != _sc_n:
 		_sc_rank = rank
 		_sc_n = n
-		_sc_rank_str = "%s of %d" % [_ordinal(rank), n]
+		_sc_rank_str = "%s of %d" % [MatchStats.ordinal(rank), n]
 	if world.frag_limit != _sc_lim:
 		_sc_lim = world.frag_limit
 		_sc_lim_str = ("FRAGS / %d" % _sc_lim) if _sc_lim > 0 else "FRAGS"
@@ -1298,31 +1303,24 @@ func _draw_score(c: Control, _size: Vector2) -> void:
 		c.draw_rect(mr, HUD_BG)
 		c.draw_rect(Rect2(mr.position, Vector2(3, mr.size.y)), Color("ffd166"))
 		c.draw_rect(Rect2(mr.position + Vector2(0, mr.size.y - 1), Vector2(mr.size.x, 1)), Color("ffd166", 0.3))
-	var tr := Rect2(Vector2(234, 16), Vector2(96, 64))
+	var time_r := Rect2(Vector2(234, 16), Vector2(96, 64))
 	var t := 0
 	if world.time_limit > 0.0:
 		t = ceili(world.time_left())
 		if t != _tm_val:
 			_tm_val = t
 			_tm_str = "%d:%02d" % [floori(t / 60.0), t % 60]
-		_hud_frame(c, tr, LOW_COL if t <= 30 else ACCENT)
+		_hud_frame(c, time_r, LOW_COL if t <= 30 else ACCENT)
 	_text(c, Vector2(pr.position.x + 40, pr.position.y + 47), _sc_kills_str, BIG_SZ, Color.WHITE, FONT)
 	_text(c, Vector2(pr.position.x + 84, pr.position.y + 42), _sc_rank_str, 16, Color("ffd166") if lead else ACCENT, FONT, false, HORIZONTAL_ALIGNMENT_LEFT)
 	if world.time_limit > 0.0:
 		var urgent := t <= 30
 		var tcol := LOW_COL.lerp(Color.WHITE, 0.5 + 0.5 * sin(world.clock * 8.0)) if urgent else Color.WHITE
-		_text(c, tr.position + Vector2(48, 50), _tm_str, 24, tcol, FONT)
-		_text(c, tr.position + Vector2(48, 22), "TIME", 10, Color(1, 1, 1, 0.55), FONT_N)
+		_text(c, time_r.position + Vector2(48, 50), _tm_str, 24, tcol, FONT)
+		_text(c, time_r.position + Vector2(48, 22), "TIME", 10, Color(1, 1, 1, 0.55), FONT_N)
 	_text(c, Vector2(pr.position.x + 84, pr.position.y + 22), _sc_lim_str, 10, Color(1, 1, 1, 0.55), FONT_N, false, HORIZONTAL_ALIGNMENT_LEFT)
 	if _mode_s != "":
 		_text(c, mr.position + Vector2(14, 17), _mode_s, 13, Color("ffe8a8"), FONT_N, false, HORIZONTAL_ALIGNMENT_LEFT)
-
-
-func _ordinal(n: int) -> String:
-	var suffix := "th"
-	if n % 100 < 11 or n % 100 > 13:
-		suffix = ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]
-	return "%d%s" % [n, suffix]
 
 
 ## Structured kill-feed row, "Killer [gun icon] Victim" (World calls this right after on_death).
@@ -1503,11 +1501,11 @@ func _sb_refresh() -> void:
 		var d: Dictionary = world.roster[eid]
 		var kills := int(d.kills)
 		var deaths := int(d.deaths)
-		var name := String(d.name)
+		var pname := String(d.name)
 		var tag := "YOU" if eid == world.my_eid else _bot_tag(eid)
-		_sb_rows.append([eid, str(i + 1), name, tag, str(kills), str(deaths),
+		_sb_rows.append([eid, str(i + 1), pname, tag, str(kills), str(deaths),
 				"%.2f" % (float(kills) / maxi(deaths, 1)), st.accuracy_text(eid) if st else "—",
-				eid == world.my_eid, FONT_N.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x])
+				eid == world.my_eid, FONT_N.get_string_size(pname, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x])
 
 
 func _draw_crosshair(c: Control, m: Vector2, p: Player, blocked := false) -> void:
@@ -1517,10 +1515,10 @@ func _draw_crosshair(c: Control, m: Vector2, p: Player, blocked := false) -> voi
 		c.draw_line(m + Vector2(-6, 6), m + Vector2(6, -6), Color(1, 0.35, 0.4, 0.9), 2.0, true)
 		return
 	var gap := 5.0
-	var len := 7.0
+	var arm := 7.0
 	for d in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN]:
-		c.draw_line(m + d * gap, m + d * (gap + len), Color(0, 0, 0, 0.6), 4.0)
-		c.draw_line(m + d * gap, m + d * (gap + len), col, 2.0)
+		c.draw_line(m + d * gap, m + d * (gap + arm), Color(0, 0, 0, 0.6), 4.0)
+		c.draw_line(m + d * gap, m + d * (gap + arm), col, 2.0)
 	c.draw_circle(m, 1.5, col)
 	if _hit_t > 0.0:
 		var hc := Color(1, 0.8, 0.2) if _hit_head else Color(1, 0.3, 0.3)

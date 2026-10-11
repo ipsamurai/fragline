@@ -103,27 +103,31 @@ func _preload() -> void:
 		await get_tree().process_frame
 
 
+## res:// path of sound `n` (.wav preferred, else .ogg), or "" if there is no such file.
+func _path(n: String) -> String:
+	for ext in [".wav", ".ogg"]:
+		if ResourceLoader.exists(DIR + n + ext):
+			return DIR + n + ext
+	return ""
+
+
 func _load(n: String) -> AudioStream:
-	var path := DIR + n + ".wav"
-	if not ResourceLoader.exists(path):
-		path = DIR + n + ".ogg"
-		if not ResourceLoader.exists(path):
-			return null
-	return load(path)
+	var path := _path(n)
+	return load(path) if path != "" else null
 
 
-func _stream(name: String) -> AudioStream:
-	var vn: PackedStringArray = _variant_names.get(name, PackedStringArray())
+func _stream(snd: String) -> AudioStream:
+	var vn: PackedStringArray = _variant_names.get(snd, PackedStringArray())
 	if not vn.is_empty():
-		name = vn[randi() % vn.size()]
-	if not _streams.has(name):
-		_streams[name] = _load(name)
-	return _streams[name]
+		snd = vn[randi() % vn.size()]
+	if not _streams.has(snd):
+		_streams[snd] = _load(snd)
+	return _streams[snd]
 
 
-## True when a sound with this name (or its numbered variants) exists.
-func has_sound(name: String) -> bool:
-	return _stream(name) != null
+## True when a file for exactly this sound name exists (cheap: nothing is loaded).
+func has_sound(snd: String) -> bool:
+	return _path(snd) != ""
 
 
 ## Stop everything on shutdown so no playback outlives the audio server.
@@ -134,17 +138,17 @@ func _exit_tree() -> void:
 		p.stop()
 
 
-## Pick a 2D voice for `name`: steal its own oldest voice if it is at its cap, else a free
+## Pick a 2D voice for `snd`: steal its own oldest voice if it is at its cap, else a free
 ## voice, else the oldest voice overall.
-func _pick_slot(name: String) -> int:
-	var limit: int = MAX_VOICES.get(name, DEFAULT_MAX_VOICES)
+func _pick_slot(snd: String) -> int:
+	var limit: int = MAX_VOICES.get(snd, DEFAULT_MAX_VOICES)
 	var same := 0
 	var oldest_same := -1
 	var free := -1
 	var oldest := 0
 	for i in POOL_2D:
 		if _pool_2d[i].playing:
-			if _slot_name[i] == name:
+			if _slot_name[i] == snd:
 				same += 1
 				if oldest_same < 0 or _slot_seq[i] < _slot_seq[oldest_same]:
 					oldest_same = i
@@ -159,39 +163,39 @@ func _pick_slot(name: String) -> int:
 
 
 ## Play a sound in the world. Silently ignores unknown names.
-func play_at(name: String, pos: Vector2, volume_db := 0.0, pitch := 1.0) -> void:
+func play_at(snd: String, pos: Vector2, volume_db := 0.0, pitch := 1.0) -> void:
 	if muted or world_muted:
 		return
-	var s := _stream(name)
+	var s := _stream(snd)
 	if s == null:
 		return
-	var i := _pick_slot(name)
+	var i := _pick_slot(snd)
 	var p := _pool_2d[i]
-	_slot_name[i] = name
+	_slot_name[i] = snd
 	_seq += 1
 	_slot_seq[i] = _seq
 	p.stream = s
 	p.global_position = pos
-	p.volume_db = volume_db + VOLUME.get(name, 0.0)
-	p.pitch_scale = 1.0 if FIXED_PITCH.has(name) else pitch * randf_range(0.94, 1.06)
+	p.volume_db = volume_db + VOLUME.get(snd, 0.0)
+	p.pitch_scale = 1.0 if FIXED_PITCH.has(snd) else pitch * randf_range(0.94, 1.06)
 	p.play()
 
 
 ## A looping positional sound owned by `parent` (e.g. a missile's engine). The caller moves
 ## it and must free it when its source is gone. Returns null when muted or missing.
-func loop_at(name: String, parent: Node, pos: Vector2, volume_db := 0.0) -> AudioStreamPlayer2D:
+func loop_at(snd: String, parent: Node, pos: Vector2, volume_db := 0.0) -> AudioStreamPlayer2D:
 	if muted or world_muted:
 		return null
-	if not _looped.has(name):
-		var base := _stream(name)
+	if not _looped.has(snd):
+		var base := _stream(snd)
 		if base == null:
 			return null
-		_looped[name] = _make_loop(base)
+		_looped[snd] = _make_loop(base)
 	var p := AudioStreamPlayer2D.new()
 	p.bus = "SFX"
-	p.stream = _looped[name]
+	p.stream = _looped[snd]
 	p.max_distance = 1800.0
-	p.volume_db = volume_db + VOLUME.get(name, 0.0)
+	p.volume_db = volume_db + VOLUME.get(snd, 0.0)
 	parent.add_child(p)
 	p.global_position = pos
 	p.play()
@@ -219,15 +223,15 @@ func _make_loop(s: AudioStream) -> AudioStream:
 
 
 ## Non-positional sound (UI, announcer stings, local feedback).
-func play(name: String, volume_db := 0.0, pitch := 1.0) -> void:
+func play(snd: String, volume_db := 0.0, pitch := 1.0) -> void:
 	if muted:
 		return
-	var s := _stream(name)
+	var s := _stream(snd)
 	if s == null:
 		return
 	var p := _pool_ui[_next_ui]
 	_next_ui = (_next_ui + 1) % POOL_UI
 	p.stream = s
-	p.volume_db = volume_db + VOLUME.get(name, 0.0)
-	p.pitch_scale = 1.0 if FIXED_PITCH.has(name) else pitch
+	p.volume_db = volume_db + VOLUME.get(snd, 0.0)
+	p.pitch_scale = 1.0 if FIXED_PITCH.has(snd) else pitch
 	p.play()

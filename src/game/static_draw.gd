@@ -44,10 +44,6 @@ static func setup_item(item: CanvasItem) -> void:
 	item.texture_repeat = CanvasItem.TEXTURE_REPEAT_DISABLED
 
 
-func is_empty() -> bool:
-	return _v.is_empty()
-
-
 func tri(a: Vector2, b: Vector2, c: Vector2, ca: Color, cb := ca, cc := ca,
 		ua := SOLID_UV, ub := SOLID_UV, uc := SOLID_UV) -> void:
 	_v.append(a); _v.append(b); _v.append(c)

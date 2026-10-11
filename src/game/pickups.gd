@@ -101,9 +101,9 @@ func _process(delta: float) -> void:
 		if st != _state[i]:
 			_state[i] = st
 			changed = true
-			var show: bool = it.active and not it.dormant
-			_icons[i].visible = show
-			_halos[i].visible = show
+			var vis: bool = it.active and not it.dormant
+			_icons[i].visible = vis
+			_halos[i].visible = vis
 			_icons[i].queue_redraw()
 			_halos[i].queue_redraw()
 		if it.active:

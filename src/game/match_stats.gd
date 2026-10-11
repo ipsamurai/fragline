@@ -14,7 +14,6 @@ const SPLASH_WIDS := [Weapons.ROCKET, Weapons.GRENADE, Weapons.REDEEMER]
 const PX_PER_M := 32.0                    # one tile = one metre
 const LONGSHOT_MIN := 480.0               # px; shorter frags don't earn "Long shot"
 const RECAP_SIZE := Vector2i(1200, 630)
-const GUN_SPRITES := "res://src/game/gun_sprites.gd"
 const MULTI_NAMES := ["", "", "DOUBLE KILL", "MULTI KILL", "MEGA KILL", "ULTRA KILL", "MONSTER KILL"]
 
 enum Award { MVP, SHARPSHOOTER, RAMPAGE, NUKE, HEADHUNTER, DEMOLITION, LONGSHOT, BRUISER }
@@ -28,9 +27,6 @@ const AWARD_INFO := {
 	Award.LONGSHOT: {"title": "LONG SHOT", "color": Color("a78bfa")},
 	Award.BRUISER: {"title": "HEAVY HITTER", "color": Color("4ade80")},
 }
-
-static var _gs: Script                     # GunSprites, once it exists (another agent's file)
-static var _gs_checked := false
 
 var world: World
 var stats := {}                            # eid -> Dictionary (see _blank())
@@ -207,7 +203,7 @@ func mode_text() -> String:
 	if world.frag_limit > 0:
 		parts.append("%d frag limit" % world.frag_limit)
 	var t := roundi(match_seconds())
-	parts.append("%d:%02d" % [t / 60, t % 60])
+	parts.append("%d:%02d" % [floori(t / 60.0), t % 60])
 	return " · ".join(parts)
 
 
@@ -286,27 +282,11 @@ static func ordinal(n: int) -> String:
 
 # --- icons -----------------------------------------------------------------------------
 
-## Weapon icon fitted into `rect`: GunSprites when that script exists, else the code-drawn gun.
+## Weapon sprite fitted into `rect` (nothing for wid -1, e.g. no favourite weapon).
 static func draw_gun_icon(ci: CanvasItem, wid: int, rect: Rect2, modulate := Color.WHITE) -> void:
 	if wid < 0 or wid >= Weapons.COUNT:
 		return
-	if not _gs_checked:
-		_gs_checked = true
-		if ResourceLoader.exists(GUN_SPRITES):
-			var s = load(GUN_SPRITES)
-			if s is Script:
-				for m in (s as Script).get_script_method_list():
-					if m.name == "draw_icon":
-						_gs = s
-						break
-	if _gs:
-		_gs.call("draw_icon", ci, wid, rect, modulate)
-		return
-	var w: Dictionary = Weapons.LIST[wid]
-	var length: float = w.gun_len
-	var sc := minf(rect.size.x * 0.9 / (length + 6.0), rect.size.y * 0.55 / (float(w.gun_w) + 8.0))
-	var xf := Transform2D(0.0, Vector2(sc, sc), 0.0, rect.get_center() + Vector2((-length * 0.5 + 1.0) * sc, -2.0 * sc))
-	CharPainter.draw_gun(ci, wid, xf)
+	GunSprites.draw_icon(ci, wid, rect, modulate)
 
 
 ## Award emblem centred on `c`, roughly `r` in radius.
@@ -360,8 +340,8 @@ static func draw_award_icon(ci: CanvasItem, id: int, c: Vector2, r: float, col: 
 				var ang := i * TAU / 8.0 + PI / 8.0
 				var d := Vector2.from_angle(ang)
 				var n := d.orthogonal()
-				var len := r * (0.82 if i % 2 == 0 else 0.6)
-				DrawUtil.quad(ci, c + n * r * 0.2, c + d * len, c - n * r * 0.2, c - n * r * 0.2, col)
+				var reach := r * (0.82 if i % 2 == 0 else 0.6)
+				DrawUtil.quad(ci, c + n * r * 0.2, c + d * reach, c - n * r * 0.2, c - n * r * 0.2, col)
 			DrawUtil.circle(ci, c, r * 0.32, lite)
 			DrawUtil.circle(ci, c, r * 0.16, Color.WHITE)
 		Award.LONGSHOT:                                   # scope line + arrowhead
@@ -488,7 +468,7 @@ func paint_recap(ci: Control) -> void:
 	var tiles := [["FRAGS", str(kills(me))], ["K/D", "%.2f" % kd(me)],
 			["ACCURACY", accuracy_text(me)], ["BEST SPREE", str(s.best_spree)]]
 	for i in tiles.size():
-		var r := Rect2(Vector2(700 + (i % 2) * 230, 140 + (i / 2) * 112), Vector2(214, 98))
+		var r := Rect2(Vector2(700 + (i % 2) * 230, 140 + floori(i / 2.0) * 112), Vector2(214, 98))
 		DrawUtil.rect(ci, r, Color(0.02, 0.03, 0.06, 0.7))
 		DrawUtil.rect(ci, Rect2(r.position, Vector2(3, r.size.y)), edge)
 		_str(ci, font, r.position + Vector2(20, 30), tiles[i][0], 15, Color(1, 1, 1, 0.6))

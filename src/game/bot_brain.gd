@@ -504,7 +504,3 @@ func reaction_progress() -> float:
 	if target == null or not target_visible or _world == null:
 		return 0.0
 	return clampf((_world.clock - _seen_since) / maxf(skill.reaction, 0.01), 0.0, 1.0)
-
-
-func skill_name() -> String:
-	return skill.name

@@ -7,7 +7,6 @@ class_name CharPainter
 ## Origin is the body centre; feet sit at +23. Shared by players and menu previews.
 
 const OUTLINE := Color(0.035, 0.04, 0.07)
-const GUN_DARK := Color(0.17, 0.19, 0.24)
 const HAND_REACH := 12.0      # shoulder -> trigger hand along the aim (Player.muzzle() matches)
 const FEET := 23.0
 const HIP := Vector2(0, 4)
@@ -165,17 +164,6 @@ static func _head(ci: CanvasItem, look: Dictionary, p: Color, s: Color, v: Color
 		DrawUtil.line(ci, c + Vector2(0.5, -1), c + Vector2(9.5, -1), OUTLINE, 7.5)
 		DrawUtil.line(ci, c + Vector2(1, -1), c + Vector2(9, -1), v, 5.0)
 		DrawUtil.line(ci, c + Vector2(3, -2.5), c + Vector2(7.5, -2.5), Color(1, 1, 1, 0.75), 1.2)
-
-
-## Draw just a weapon (HUD icons): same footprint as the old procedural gun, i.e. spanning
-## x = -4 .. gun_len + 1 along +x of `origin`, centred on y = 0.
-static func draw_gun(ci: CanvasItem, wid: int, origin: Transform2D) -> void:
-	var len: float = Weapons.LIST[clampi(wid, 0, Weapons.COUNT - 1)].gun_len + 5.0
-	var sz := GunSprites.size(wid)
-	var h := sz.y * len / sz.x
-	ci.draw_set_transform_matrix(origin)
-	GunSprites.draw_icon(ci, wid, Rect2(-4.0, -h * 0.5, len, h))
-	ci.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 ## Muzzle flash just past the sprite's barrel tip (current transform = gun space, grip at 0).

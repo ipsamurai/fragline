@@ -27,8 +27,8 @@ var _glow: Node2D
 var _trail_t := 0.0
 var _trail_n := 0                # trail ticks (low quality skips every other puff)
 var _drew := false               # last redraw had projectiles in it
-const MAX_ROCKET_LOOPS := 4      # sfx: concurrent rocket engine loops
-var _rocket_loops := 0           # sfx
+const MAX_ROCKET_LOOPS := 4      # concurrent rocket engine loops (capped for perf)
+var _rocket_loops := 0
 
 
 func _ready() -> void:
@@ -57,10 +57,10 @@ func spawn(key: String, pos: Vector2, vel: Vector2, owner_eid: int, wid: int) ->
 	p.bounces = p.def.get("bounces", 0)
 	if p.def.has("loop_sound"):
 		p.sound = Sfx.loop_at(p.def.loop_sound, self, pos, -2.0)
-	elif key == "rocket" and _rocket_loops < MAX_ROCKET_LOOPS:   # sfx: rocket engine (capped for perf)
-		p.sound = Sfx.loop_at("rocket_loop", self, pos, -9.0)     # sfx
-		if p.sound:                                               # sfx
-			_rocket_loops += 1                                    # sfx
+	elif key == "rocket" and _rocket_loops < MAX_ROCKET_LOOPS:   # rocket engine loop
+		p.sound = Sfx.loop_at("rocket_loop", self, pos, -9.0)
+		if p.sound:
+			_rocket_loops += 1
 	list.append(p)
 	return p
 
@@ -103,8 +103,8 @@ func remove(p: Proj) -> void:
 ## Release anything a projectile owns (its looping sound) when it leaves the list.
 func _drop(p: Proj) -> void:
 	if p.sound:
-		if p.key == "rocket":           # sfx
-			_rocket_loops -= 1          # sfx
+		if p.key == "rocket":
+			_rocket_loops -= 1
 		p.sound.queue_free()
 		p.sound = null
 

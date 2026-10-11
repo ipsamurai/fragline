@@ -261,19 +261,6 @@ static func stroke(ci: CanvasItem, a: Vector2, b: Vector2, col: Color, width: fl
 	ci.draw_primitive(_pts, _col1, _uv_stripe, _tex)
 
 
-## Open polyline as separate anti-aliased segments.
-static func polyline(ci: CanvasItem, pts: PackedVector2Array, col: Color, width: float) -> void:
-	for i in pts.size() - 1:
-		line(ci, pts[i], pts[i + 1], col, width)
-
-
-## Closed outline of a polygon as anti-aliased segments (replaces closed draw_polyline).
-static func outline(ci: CanvasItem, pts: PackedVector2Array, col: Color, width: float) -> void:
-	var n := pts.size()
-	for i in n:
-		line(ci, pts[i], pts[(i + 1) % n], col, width)
-
-
 ## Anti-aliased arc / ring of any radius and stroke width, as seamless annulus segments.
 static func arc(ci: CanvasItem, c: Vector2, r: float, from: float, to: float, width: float,
 		col: Color, segs := 32) -> void:

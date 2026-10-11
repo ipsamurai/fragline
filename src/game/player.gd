@@ -255,7 +255,7 @@ func on_new_weapon(wid: int) -> void:
 		select_weapon(wid)
 
 
-# --- audio hooks (sfx): equip, flak pump, low-ammo warning, falling wind ------------------
+# --- audio hooks: equip, flak pump, low-ammo warning, falling wind ------------------------
 
 const LOW_AMMO_DIV := 5                # warn at <= 1/5 (20%) of max ammo
 const FALL_SFX_SPEED := 900.0          # falling faster than this plays the wind loop
@@ -269,11 +269,6 @@ var _fall_snd: AudioStreamPlayer2D     # local player's wind loop (child of this
 var _fall_k := 0.0                     # wind loop volume, 0..1
 
 
-static func _sound_exists(n: String) -> bool:
-	return ResourceLoader.exists("res://assets/audio/%s.ogg" % n) \
-			or ResourceLoader.exists("res://assets/audio/%s.wav" % n)
-
-
 ## Equip sound for a weapon switch: loud and non-positional for "you", quiet in-world for bots.
 func _play_equip(wid: int) -> void:
 	if mode == Mode.PUPPET:
@@ -281,7 +276,7 @@ func _play_equip(wid: int) -> void:
 	if _equip_names.is_empty():
 		for w in Weapons.COUNT:
 			var n := "equip_%d" % w
-			_equip_names.append(n if _sound_exists(n) else "weapon_switch")
+			_equip_names.append(n if Sfx.has_sound(n) else "weapon_switch")
 	if mode == Mode.LOCAL:
 		if not world.demo:
 			Sfx.play(_equip_names[wid], -3.0)
@@ -443,7 +438,7 @@ func _update_fire(delta: float) -> void:
 	if world.is_net_client() and not Weapons.infinite(weapon):
 		ammo[weapon] -= cost            # predicted; the host's inventory updates correct it
 	world.request_fire(self, weapon, alt, muzzle(), Vector2.from_angle(aim))
-	_after_fire_audio(alt)              # sfx: flak pump + low-ammo warning
+	_after_fire_audio(alt)              # flak pump + low-ammo warning
 	if not has_ammo(weapon):            # e.g. the Redeemer after its one shot: don't wait for a dry click
 		select_weapon(best_weapon())
 
@@ -623,7 +618,7 @@ func _simulate(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	_audio_tick(delta)                  # sfx: flak pump timer + falling wind (runs while dead to clean up)
+	_audio_tick(delta)                  # flak pump timer + falling wind (runs while dead to clean up)
 	if not alive:
 		return
 	# Interpolate the drawn body between the last two physics positions.

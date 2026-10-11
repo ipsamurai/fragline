@@ -47,11 +47,6 @@ static func desc_of(m: int) -> String:
 	return DESCS[sanitize(m)]
 
 
-## True when the mode replaces the normal "find weapons, run out of ammo" loadout.
-static func fixed_loadout(m: int) -> bool:
-	return m != DEATHMATCH
-
-
 ## Weapon this player holds under the current mode (-1 = normal Deathmatch inventory).
 static func weapon_for(world: World, eid: int) -> int:
 	match world.game_mode:

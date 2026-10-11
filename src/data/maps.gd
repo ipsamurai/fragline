@@ -14,7 +14,7 @@ class_name Maps
 ## Layout convention: spawn rooms at both ends behind B doors, a buffer balcony/porch,
 ## then the central arena. Weapon slots sit at deliberate spots, but what spawns there is
 ## random; power-ups stay fixed. Theme colours are hex; `style` picks the background;
-## `music` is the arena's looping track (each track is shared by two arenas).
+## `music` is the arena's looping track (tracks are shared between arenas).
 
 const TILE := 32
 

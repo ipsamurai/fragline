@@ -5,8 +5,10 @@ extends Node2D
 ## the rules run here and events are applied directly (the host also broadcasts them).
 ## On a network client the rules don't run: events and snapshots from the host drive it.
 
-signal restart_requested               # results / pause screen: play the same setup again
-signal menu_requested                  # results / pause screen: back to the main menu
+@warning_ignore("unused_signal")
+signal restart_requested               # results / pause screen: play the same setup again (emitted by Hud)
+@warning_ignore("unused_signal")
+signal menu_requested                  # results / pause screen: back to the main menu (emitted by Hud)
 signal died(victim_eid: int, killer_eid: int, wid: int)   # every death, as it's applied
 signal event_applied(kind: int, args: Array)   # every event, everywhere (MatchStats listens)
 
@@ -310,7 +312,7 @@ func _standard_weapons() -> Array[int]:
 
 
 ## When a random slot respawns it re-rolls, preferring a weapon not already lying around.
-func _reroll(it: Dictionary) -> int:
+func _reroll(_it: Dictionary) -> int:
 	var lying := {}
 	for other in pickups.items:
 		if other.active and other.type == "w":
@@ -497,7 +499,7 @@ func apply_event(kind: Ev, a: Array) -> void:
 			Sfx.play_at("death", pos)
 			add_shake(6.0, pos)
 			hud.on_death(a[0], a[1], a[2])
-			hud.feed_kill(a[1], a[0], a[2], hud._head_by.get(a[0], 0) == a[1] and clock - float(hud._head_at.get(a[0], -1e9)) <= hud.HEAD_WINDOW)
+			hud.feed_kill(a[1], a[0], a[2], hud.headshot_noted(a[0], a[1]))
 			died.emit(a[0], a[1], a[2])
 		Ev.HIT:
 			var victim: Player = entities.get(a[0])
@@ -518,10 +520,10 @@ func apply_event(kind: Ev, a: Array) -> void:
 			var away := (at - src.global_position).normalized() if src else Vector2.UP
 			fx.body_hit(at, away, victim.look.visor if victim else Color(1, 0.25, 0.35), armored, a[1], a[5])
 			Sfx.play_at("hit_armor" if armored else "hit", at, -4.0)
-			if a[5]:                                                  # sfx: headshot crack at the victim
-				Sfx.play_at("headshot", at, -2.0)                     # sfx
-				if a[3] == my_eid and a[0] != my_eid and not demo:    # sfx: and a ping for the shooter
-					Sfx.play("headshot", -9.0, 1.15)                  # sfx
+			if a[5]:                                       # headshot crack at the victim...
+				Sfx.play_at("headshot", at, -2.0)
+				if a[3] == my_eid and a[0] != my_eid and not demo:   # ...and a ping for the shooter
+					Sfx.play("headshot", -9.0, 1.15)
 			if a[3] == my_eid and a[0] != my_eid:
 				hud.hit_marker(a[5])
 				fx.text(at - Vector2(0, 26), str(a[1]), Color(1, 0.8, 0.2) if a[5] else Color.WHITE)
@@ -629,7 +631,7 @@ func apply_event(kind: Ev, a: Array) -> void:
 				hud.message("THE REDEEMER IS ONLINE", "Find it before someone else does", Color.WHITE, 3.0, 3, 3)
 				if not demo:
 					Sfx.play("pickup_power", 0.0, 0.6)
-				hud._announce("The Redeemer is online!", Announcer.HIGH)
+				hud.announce("The Redeemer is online!", Announcer.HIGH)
 			if not it.active:
 				it.wait = pickups.respawn_time(it)
 				it.respawn_at = clock + it.wait
@@ -676,9 +678,9 @@ func _physics_process(delta: float) -> void:
 			hud.message("FIGHT!", "", UiTheme.ACCENT, 1.2, 3, 3)
 			if not demo:
 				Sfx.play("pickup_power", -2.0, 1.2)
-			hud._announce("Fight!", Announcer.CRITICAL)
+			hud.announce("Fight!", Announcer.CRITICAL)
 		elif ceili(countdown) < before:
-			hud._announce(Hud.COUNT_SAY[ceili(countdown)], Announcer.CRITICAL)
+			hud.announce(Hud.COUNT_SAY[ceili(countdown)], Announcer.CRITICAL)
 	elif time_limit > 0.0:                            # timed match: 5 min / 1 min / 30 s / 10..1 calls
 		hud.time_warnings(time_left())
 	if is_net_client():
@@ -781,7 +783,8 @@ func request_fire(p: Player, wid: int, alt: bool, origin: Vector2, dir: Vector2)
 
 
 func _server_fire(p: Player, wid: int, alt: bool, origin: Vector2, dir: Vector2) -> void:
-	if ended or countdown > 0.0 or not p.alive or not p.owns(wid) or p.in_no_fire_zone() 			or p.has_status(Status.SHOCK):
+	if ended or countdown > 0.0 or not p.alive or not p.owns(wid) or p.in_no_fire_zone() \
+			or p.has_status(Status.SHOCK):
 		return
 	var st := Weapons.stats(wid, alt)
 	var cost: int = st.get("cost", 1)

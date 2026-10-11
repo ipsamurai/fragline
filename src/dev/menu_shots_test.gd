@@ -3,7 +3,7 @@ extends Node
 ##   godot --path . --rendering-driver opengl3 --resolution 1600x900 -- --test=menu_shots [--out=<dir>]
 ## Saves menu_<screen>_<width>.png. Restores your settings file after.
 
-var out_dir := "C:/Users/Soumya/AppData/Local/Temp/claude/C--Users-Soumya-Desktop-HACKOINVERSE/4b7ea364-2f11-4ca6-907e-8768f0ed2a2b/scratchpad"
+var out_dir := "user://"
 var _backup := ""
 
 
@@ -25,7 +25,7 @@ func _wait(sec: float) -> void:
 func _shot(name: String) -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
-	var path := "%s/menu_%s_%d.png" % [out_dir, name, img.get_width()]
+	var path := out_dir.path_join("menu_%s_%d.png" % [name, img.get_width()])
 	img.save_png(path)
 	print("saved ", path)
 
@@ -36,7 +36,7 @@ func _run() -> void:
 	var menu: Menu = main.menu
 	await _wait(1.6)
 	await _shot("main")
-	# Hover the second entry to show the hover state.
+	# Focus the Armory entry to show the hover state.
 	var b: Control = menu._screen.find_child("Armory", true, false)
 	if b:
 		b.grab_focus()

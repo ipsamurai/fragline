@@ -1,7 +1,7 @@
 class_name Menu
 extends CanvasLayer
-## Start menu over a live bot match. Screens: main, play setup (bots / host LAN / join LAN),
-## LAN lobby, customize, settings, credits.
+## Start menu over a live bot match. Screens: main, armory, play setup (bots / host LAN /
+## join LAN), LAN lobby, customize, settings, credits.
 ## Emits requests; Main decides what to load.
 
 signal play_requested(config: Dictionary)
@@ -127,7 +127,7 @@ func show_main() -> void:
 	]
 	if not OS.has_feature("web"):
 		entries.append(["Quit", func() -> void: get_tree().quit(), "Back to the desktop"])
-	var first: Button
+	var first: Button = null
 	for i in entries.size():
 		var b := NeonButton.new(entries[i][0], i + 1, entries[i][2])
 		b.name = String(entries[i][0])
@@ -578,7 +578,7 @@ func show_notice(text: String) -> void:
 	n.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 18)
 	n.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	var l := UiTheme.label(text)
-	l.add_theme_color_override("font_color", Color("ffc93c"))
+	l.add_theme_color_override("font_color", UiTheme.GOLD)
 	n.add_child(l)
 	_root.add_child(n)
 	var tw := create_tween()
