@@ -31,6 +31,13 @@ byte-for-byte against the original pack file) and 15 `.ogg` files from Kenney. E
 the two weapon packs; none are generated or synthesised. In the game, the LMGLolo sounds are listed in
 `FIXED_PITCH` in `src/autoload/sfx.gd`, so they always play at their original pitch with no random variation.
 
+## Trailer (`docs/media/fragline-trailer.mp4`)
+- Made by **Hellfire Coders**: Saikat Das, Soumyadeep Dey, Subarna Maity and Sourish Panda.
+- Gameplay footage is FRAGLINE itself. Gameplay audio is muted in the trailer, because sound synced to video counts as an adaptation under CC BY-ND and the LMGLolo sounds must stay unmodified.
+- Music: "Hyperflight Racing" by The Cynic Project (CC0, see below).
+- Impact sounds: SnakeF8 / F8 Studios, *Snake's Authentic Gun Sounds And More* (see above).
+- Edited with [Remotion](https://www.remotion.dev).
+
 ## Music (all CC0 — public domain; credited with thanks)
 All tracks by **The Cynic Project / cynicmusic.com** (OpenGameArt):
 - **"Calm Relax 1 (Synthwave 421k)"** — menu theme — https://opengameart.org/content/calm-relax-1-synthwave-421k

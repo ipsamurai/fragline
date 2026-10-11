@@ -15,6 +15,8 @@ A modern tribute to the Newgrounds classic *Unreal Flash*, built from scratch in
 
 ![FRAGLINE main menu over a live bot match](docs/screenshots/menu.jpg)
 
+**[▶ Watch the 60-second trailer](docs/media/fragline-trailer.mp4)** (1080p, real gameplay)
+
 </div>
 
 ## Why FRAGLINE
@@ -226,6 +228,8 @@ What made the difference:
 - **Engine settings.** `allow_hidpi=false`, a cap on physics catch-up steps, and the background match behind the menu freezes on sub-screens.
 
 The web build has a benchmark mode built in: open `index.html?bench=20&map=2&bots=7` (add `&xray=1` to include the overlay), and the results are published as `window.__bench`. Desktop builds take `-- --bench=20 --map=2 [--xray] [--bench-quit] [--bench-shot=<file.png>]`; a native run on the same laptop also reports 68 FPS at about 41 draw calls.
+
+For capturing footage, the native benchmark also accepts `--bots=N`, `--mode=N` (0-3), `--skill=N` (0-4), `--seed=N`, `--lowgrav`, `--nohud`, `--sfx` and `--timescale=F`, plus `--size=WxH` (render at that size in a borderless window) and `--frames=DIR` (save every frame as a JPEG; desktop only). The trailer was captured this way.
 
 ## URL parameters
 
