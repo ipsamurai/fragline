@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://cc5qwafu8t8gq"
-path="res://.godot/imported/grenade.wav-9738b3a1ee49db697d2c82ea7f235a8c.sample"
+uid="uid://vvge26ci4rdf"
+path="res://.godot/imported/combo.wav-9f6768319d8b29b0cbb9fb2c180ec9aa.sample"
 
 [deps]
 
-source_file="res://assets/audio/grenade.wav"
-dest_files=["res://.godot/imported/grenade.wav-9738b3a1ee49db697d2c82ea7f235a8c.sample"]
+source_file="res://assets/audio/combo.wav"
+dest_files=["res://.godot/imported/combo.wav-9f6768319d8b29b0cbb9fb2c180ec9aa.sample"]
 
 [params]
 

@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://bxpvnxhntblnd"
-path="res://.godot/imported/minigun3.wav-7bfe02fd3dc06c9e892f04c9aa41e896.sample"
+uid="uid://j13qg056butj"
+path="res://.godot/imported/nuke.wav-8e6b3c9dd1972f56111b2de23f467b49.sample"
 
 [deps]
 
-source_file="res://assets/audio/minigun3.wav"
-dest_files=["res://.godot/imported/minigun3.wav-7bfe02fd3dc06c9e892f04c9aa41e896.sample"]
+source_file="res://assets/audio/nuke.wav"
+dest_files=["res://.godot/imported/nuke.wav-8e6b3c9dd1972f56111b2de23f467b49.sample"]
 
 [params]
 

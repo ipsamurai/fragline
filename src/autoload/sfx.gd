@@ -12,20 +12,19 @@ const DIR := "res://assets/audio/"
 ## name -> N: plays a random one of name1..nameN.
 const VARIANTS := {
 	"explode": 4, "hit": 2, "step": 6, "death": 6,
-	"pistol": 3, "minigun": 3, "flak": 4, "rocket": 4, "sniper": 3,
+	"pistol": 2, "minigun": 2, "pulse": 2, "flak": 4, "rocket": 4, "sniper": 4, "grenade": 4, "shock_alt": 3,
 }
 
 ## Per-name level trim (dB), added to the caller's volume_db so sounds from different packs
 ## sit together in the mix. Measured from each file's peak 50 ms loudness.
 const VOLUME := {
-	"pistol": -3.0, "minigun": -7.0, "flak": -1.0, "flak_alt": 0.0, "flak_pump": -3.0,
-	"rocket": 1.0, "rocket_loop": -5.0, "grenade": -3.0, "sniper": -2.0,
-	"pulse": -4.0, "shock_alt": -2.0,
-	"explode": -1.0, "death": 5.0, "step": 5.0, "land": 6.0, "jump": 2.0,
-	"pickup_weapon": -4.0, "low_ammo": -4.0, "fall_loop": 2.0,
-	"kill_confirm": -5.0, "headshot": -2.0,
-	"equip_0": -7.0, "equip_1": -8.0, "equip_2": -6.0, "equip_3": -7.0, "equip_4": -1.0,
-	"equip_5": -1.0, "equip_6": 0.0, "equip_7": -5.0, "equip_8": -9.0,
+	"flak": -1.0, "flak_pump": -3.0, "rocket": 1.0, "rocket_loop": -5.0, "sniper": -2.0,
+	"explode": -1.0, "death": 5.0, "step": 5.0, "land": 6.0, "jump": 2.0, "low_ammo": -4.0,
+	"fall_loop": 2.0, "equip_5": -1.0, "pistol": 2.6, "minigun": -0.3, "flak_alt": 2.2,
+	"headshot": -2.9, "kill_confirm": -1.5, "pickup_weapon": 0.0, "equip_0": -3.6, "equip_1": -4.9,
+	"equip_2": -3.1, "equip_3": -2.7, "equip_4": 1.8, "equip_6": -0.9, "equip_7": 1.6,
+	"equip_8": -2.2, "pulse": -1.3, "shock": 3.0, "shock_alt": 0.9, "grenade": -3.0, "combo": -1.0,
+	"nuke": 0.6, "redeemer": -5.0,
 }
 
 ## Sounds from the "FREE FPS SFX Pack" (CC BY-ND 4.0: no derivatives). They always play
@@ -33,14 +32,15 @@ const VOLUME := {
 const FIXED_PITCH := {
 	"flak": true, "flak_pump": true, "rocket": true, "rocket_loop": true, "sniper": true,
 	"explode": true, "death": true, "step": true, "land": true, "jump": true,
-	"low_ammo": true, "fall_loop": true, "equip_5": true,
+	"low_ammo": true, "fall_loop": true, "equip_5": true, "equip_7": true,
+	"grenade": true, "shock_alt": true, "combo": true, "nuke": true, "redeemer": true,
 }
 
 ## Max simultaneous positional voices per name. A further play steals that name's oldest
 ## voice instead of cutting off some other sound (rapid fire can't starve explosions).
 const MAX_VOICES := {
 	"minigun": 4, "pulse": 4, "pistol": 4, "step": 3, "hit": 4, "hit_armor": 3, "bounce": 3,
-	"flak": 3, "flak_pump": 2, "explode": 5, "death": 3, "rocket": 4, "spawn": 3,
+	"flak": 3, "flak_pump": 2, "grenade": 3, "shock": 3, "explode": 5, "death": 3, "rocket": 4, "spawn": 3,
 }
 const DEFAULT_MAX_VOICES := 6
 

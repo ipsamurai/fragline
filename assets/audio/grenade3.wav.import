@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://do2688nb6r7gl"
-path="res://.godot/imported/pistol3.wav-ab9b69c2070b4db73fb577234a8d1137.sample"
+uid="uid://c0pyyj3tgxfwo"
+path="res://.godot/imported/grenade3.wav-ec9b8b14c22ced03e726cd41a338b45d.sample"
 
 [deps]
 
-source_file="res://assets/audio/pistol3.wav"
-dest_files=["res://.godot/imported/pistol3.wav-ab9b69c2070b4db73fb577234a8d1137.sample"]
+source_file="res://assets/audio/grenade3.wav"
+dest_files=["res://.godot/imported/grenade3.wav-ec9b8b14c22ced03e726cd41a338b45d.sample"]
 
 [params]
 
