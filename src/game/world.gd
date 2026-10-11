@@ -495,8 +495,6 @@ func apply_event(kind: Ev, a: Array) -> void:
 				Engine.time_scale = 0.05                 # hitstop: a 70 ms freeze sells the frag
 				_hitstop_until = Time.get_ticks_msec() + 70
 			Sfx.play_at("death", pos)
-			if a[1] == my_eid and a[0] != my_eid and not demo:   # sfx: you fragged someone
-				Sfx.play("kill_confirm", -4.0)                   # sfx
 			add_shake(6.0, pos)
 			hud.on_death(a[0], a[1], a[2])
 			hud.feed_kill(a[1], a[0], a[2], hud._head_by.get(a[0], 0) == a[1] and clock - float(hud._head_at.get(a[0], -1e9)) <= hud.HEAD_WINDOW)
