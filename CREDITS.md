@@ -21,10 +21,15 @@
   `pickup_weapon`, `kill_confirm`, `headshot` (`.wav`, byte-identical copies; Godot's importer trims the
   silence at the start and end of these files so shots fire without delay).
 - **Kenney** — *Sci-fi Sounds*, *Impact Sounds*, *Interface Sounds* — Creative Commons Zero (CC0)
-  — https://kenney.nl/assets — menu clicks, item pickups, hit markers and other non-weapon sounds
-  (the `.ogg` files in `assets/audio/` are renamed copies of a subset of these packs).
+  — https://kenney.nl/assets — menu clicks, item pickups, hit markers and other non-weapon sounds.
+  Files: `bounce`, `frag`, `hit1-2`, `hit_armor`, `jumppad`, `no_ammo`, `pickup_armor`, `pickup_health`,
+  `pickup_power`, `spawn`, `ui_back`, `ui_click`, `ui_hover`, `weapon_switch` (`.ogg`, renamed copies of a
+  subset of these packs).
 
-Every weapon sound comes from the two packs above; none are generated or synthesised.
+That is every file in `assets/audio/`: 64 `.wav` files from the two weapon packs (46 LMGLolo, 18 SnakeF8; each one checked
+byte-for-byte against the original pack file) and 15 `.ogg` files from Kenney. Every weapon sound comes from
+the two weapon packs; none are generated or synthesised. In the game, the LMGLolo sounds are listed in
+`FIXED_PITCH` in `src/autoload/sfx.gd`, so they always play at their original pitch with no random variation.
 
 ## Music (all CC0 — public domain; credited with thanks)
 All tracks by **The Cynic Project / cynicmusic.com** (OpenGameArt):
@@ -40,7 +45,7 @@ All tracks by **The Cynic Project / cynicmusic.com** (OpenGameArt):
   (also on OpenGameArt, https://opengameart.org/user/88671) — Creative Commons Zero (CC0 1.0,
   https://creativecommons.org/publicdomain/zero/1.0/); credited with thanks, not required.
   `assets/sprites/guns.png` is an atlas of nine sprites from the pack (2px-outline variant,
-  upscaled 4x nearest-neighbour): Enforcer = Pack 1 #26, Flak Cannon = Pack 1 #51,
+  upscaled 4x nearest-neighbour; each matches the pack file pixel for pixel): Enforcer = Pack 2 #19, Flak Cannon = Pack 1 #51,
   Minigun = Pack 1 #48, Shock Rifle = Pack 2 #33, Pulse Gun = Pack 1 #32,
   Rocket Launcher = Pack 1 #50, Grenade Launcher = Pack 1 #42, Sniper Rifle = Pack 1 #56,
   Redeemer = Pack 2 #15.
