@@ -47,14 +47,33 @@ func _handle_url() -> void:
 
 
 ## ?bench=SECONDS: an all-bot match with the HUD showing, timed by Bench.
-func _start_bench(seconds: float, map_index: int, bots: int) -> void:
+## opts (native capture flags, see _start_dev_tool): mode, skill, lowgrav, seed, nohud, sfx, timescale.
+func _start_bench(seconds: float, map_index: int, bots: int, opts := {}) -> void:
 	_clear()
-	Sfx.world_muted = true
+	if opts.has("seed"):
+		seed(int(opts.seed))
+	Sfx.world_muted = not opts.get("sfx", false)
 	world = _new_world()
 	world.demo = true
+	if opts.has("skill"):
+		world.bot_skill = clampi(int(opts.skill), 0, BotBrain.Skill.size() - 1) as BotBrain.Skill
 	world.setup(Maps.LIST[posmod(map_index, Maps.LIST.size())], clampi(bots, 0, 11))
-	world.hud.visible = true
-	if "--xray" in OS.get_cmdline_user_args() or (OS.has_feature("web") and 			str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('xray') || ''", true)) != ""):
+	if opts.has("skill"):                    # the camera's bot fights at the same level
+		world.local_player.brain = BotBrain.new(world.bot_skill)
+	if opts.has("mode") or opts.has("lowgrav"):
+		# GameMode.configure() forces Deathmatch on demo worlds; re-run it as a normal match.
+		world.demo = false
+		world.game_mode = GameMode.sanitize(opts.get("mode", GameMode.DEATHMATCH))
+		world.low_gravity = opts.get("lowgrav", false)
+		GameMode.configure(world)
+		world.demo = true
+		world.frag_limit = 0                 # endless, like the demo match
+	world.hud.visible = not opts.get("nohud", false)
+	if opts.has("timescale"):
+		Engine.time_scale = clampf(float(opts.timescale), 0.05, 4.0)
+	var xray_url := OS.has_feature("web") and \
+			str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('xray') || ''", true)) != ""
+	if "--xray" in OS.get_cmdline_user_args() or xray_url:
 		XRay.enabled = true
 		world.xray._apply()
 	var b := Bench.new()
@@ -62,15 +81,52 @@ func _start_bench(seconds: float, map_index: int, bots: int) -> void:
 	add_child(b)
 
 
+## Trailer capture (native, any screen): --size=WxH renders at that size in a borderless window
+## (may exceed the screen); --frames=DIR saves every drawn frame as DIR/00000.jpg, since Movie
+## Maker scales its own output to the project's 1280x720 (use its audio track alongside).
+func _start_capture() -> void:
+	if OS.has_feature("web"):                # desktop dev tooling only; never writes files from a browser
+		return
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--size=") and arg.trim_prefix("--size=").split("x").size() == 2:
+			var wh := arg.trim_prefix("--size=").split("x")
+			var win := get_window()
+			win.max_size = Vector2i(int(wh[0]), int(wh[1]))
+			win.borderless = true
+			win.position = Vector2i.ZERO
+			win.size = win.max_size
+		elif arg.begins_with("--frames="):
+			var dir := arg.trim_prefix("--frames=")
+			var count := [0]
+			RenderingServer.frame_post_draw.connect(func() -> void:
+				get_viewport().get_texture().get_image().save_jpg("%s/%05d.jpg" % [dir, count[0]], 0.95)
+				count[0] += 1)
+
+
 ## Returns true if a dev tool was requested on the command line (excluded from exports).
 func _start_dev_tool() -> bool:
+	_start_capture()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--bench="):
 			var map_index := 0
+			var bots := 7
+			var opts := {}                   # optional capture flags (trailer footage)
 			for m in OS.get_cmdline_user_args():
 				if m.begins_with("--map="):
 					map_index = int(m.trim_prefix("--map="))
-			_start_bench.call_deferred(float(arg.trim_prefix("--bench=")), map_index, 7)
+				elif m.begins_with("--bots="):
+					bots = int(m.trim_prefix("--bots="))
+				elif m.begins_with("--mode="):
+					opts.mode = int(m.trim_prefix("--mode="))
+				elif m.begins_with("--skill="):
+					opts.skill = int(m.trim_prefix("--skill="))
+				elif m.begins_with("--seed="):
+					opts.seed = int(m.trim_prefix("--seed="))
+				elif m.begins_with("--timescale="):
+					opts.timescale = float(m.trim_prefix("--timescale="))
+				elif m in ["--lowgrav", "--nohud", "--sfx"]:
+					opts[m.trim_prefix("--")] = true
+			_start_bench.call_deferred(float(arg.trim_prefix("--bench=")), map_index, bots, opts)
 			return true
 		if arg.begins_with("--shots="):
 			add_child(load("res://src/dev/shots.gd").new())
