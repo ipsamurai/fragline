@@ -1,14 +1,17 @@
 class_name LevelDecor
 extends Node2D
 ## Static set dressing generated from the tile grid: back walls, platform supports,
-## shadows, lamps and per-style details. Drawn once (Godot caches the commands).
-## Sits behind the tiles; `lights` is an additive layer drawn over the scene.
+## shadows, lamps and per-style details. Recorded once into a StaticDraw mesh, so the whole
+## layer is one draw call. Sits behind the tiles; `lights` is an additive layer drawn over the
+## scene (another single mesh), hidden on low quality.
 
 const T := Maps.TILE
 
 var level: Level
 var lights: Node2D
 var _rng := RandomNumberGenerator.new()
+var _g: StaticDraw                     # decor mesh (must outlive _draw(): commands hold its RID)
+var _lg: StaticDraw                    # lights mesh
 
 
 func setup(p_level: Level) -> void:
@@ -21,6 +24,15 @@ func setup(p_level: Level) -> void:
 	lights.z_index = 1
 	lights.draw.connect(_draw_lights)
 	level.add_child(lights)
+	StaticDraw.setup_item(self)
+	StaticDraw.setup_item(lights)
+	# Lamp glow is built regardless of quality; the setting just shows/hides the layer.
+	lights.visible = Settings.quality > 0
+	Settings.changed.connect(_on_settings_changed)
+
+
+func _on_settings_changed() -> void:
+	lights.visible = Settings.quality > 0
 
 
 func _style() -> String:
@@ -57,6 +69,13 @@ func _scan(x: int, y: int, dir: int, limit: int) -> int:
 
 
 func _draw() -> void:
+	if _g == null:
+		_bake()
+	_g.draw_on(self)
+
+
+func _bake() -> void:
+	_g = StaticDraw.new()
 	_rng.seed = hash(level.def.id)
 	var th: Dictionary = level.theme
 	var back: Color = th.mid.lerp(th.tile, 0.25).darkened(0.35)
@@ -78,28 +97,28 @@ func _back_wall(c: Color) -> void:
 	var pillar_w := 56.0
 	var x := 96.0
 	while x < size.x - 96.0:
-		draw_rect(Rect2(x, 0, pillar_w, size.y), c)
-		draw_rect(Rect2(x + 6, 0, 4, size.y), c.lightened(0.08))
-		draw_rect(Rect2(x + pillar_w - 10, 0, 4, size.y), c.darkened(0.2))
+		_g.rect(Rect2(x, 0, pillar_w, size.y), c)
+		_g.rect(Rect2(x + 6, 0, 4, size.y), c.lightened(0.08))
+		_g.rect(Rect2(x + pillar_w - 10, 0, 4, size.y), c.darkened(0.2))
 		x += 320.0
 	var beam_y := 160.0
 	while beam_y < size.y:
-		draw_rect(Rect2(0, beam_y, size.x, 18), c)
-		draw_rect(Rect2(0, beam_y, size.x, 3), c.lightened(0.1))
+		_g.rect(Rect2(0, beam_y, size.x, 18), c)
+		_g.rect(Rect2(0, beam_y, size.x, 3), c.lightened(0.1))
 		beam_y += 288.0
 	# Diagonal bracing between pillars on the upper beam.
 	x = 96.0 + pillar_w
 	while x < size.x - 320.0:
-		draw_line(Vector2(x, 178), Vector2(x + 264, 440), c, 8.0)
-		draw_line(Vector2(x + 264, 178), Vector2(x, 440), c, 8.0)
+		_g.line(Vector2(x, 178), Vector2(x + 264, 440), c, 8.0)
+		_g.line(Vector2(x + 264, 178), Vector2(x, 440), c, 8.0)
 		x += 320.0
 	if _style() == "cryo":
 		x = 220.0
 		while x < size.x - 200.0:
 			var r := Rect2(x, 230, 120, 70)
-			draw_rect(r.grow(6), c.darkened(0.3))
-			draw_rect(r, level.theme.sky_bottom.lightened(0.1))
-			draw_line(r.position + Vector2(20, 60), r.position + Vector2(70, 10), Color(1, 1, 1, 0.18), 6.0)
+			_g.rect(r.grow(6), c.darkened(0.3))
+			_g.rect(r, level.theme.sky_bottom.lightened(0.1))
+			_g.line(r.position + Vector2(20, 60), r.position + Vector2(70, 10), Color(1, 1, 1, 0.18), 6.0)
 			x += 640.0
 	if _style() == "foundry":
 		# Hanging chains from the ceiling.
@@ -108,9 +127,9 @@ func _back_wall(c: Color) -> void:
 			var len := _rng.randf_range(120, 300)
 			var y := 32.0
 			while y < len:
-				draw_rect(Rect2(cx - 3, y, 6, 10), c.lightened(0.1))
+				_g.rect(Rect2(cx - 3, y, 6, 10), c.lightened(0.1))
 				y += 14.0
-			draw_line(Vector2(cx - 10, len), Vector2(cx + 10, len + 14), c.lightened(0.15), 5.0)
+			_g.line(Vector2(cx - 10, len), Vector2(cx + 10, len + 14), c.lightened(0.15), 5.0)
 
 
 ## Struts under one-way platforms down to the floor, or cables up to a ceiling.
@@ -138,20 +157,20 @@ func _supports(c: Color) -> void:
 				var above := _scan(cx, r.position.y, -1, 14)
 				if above > 0:
 					var top := (above + 1) * T
-					draw_line(Vector2(px - 8, top), Vector2(px - 4, py), c.lightened(0.2), 2.0)
-					draw_line(Vector2(px + 8, top), Vector2(px + 4, py), c.lightened(0.2), 2.0)
+					_g.line(Vector2(px - 8, top), Vector2(px - 4, py), c.lightened(0.2), 2.0)
+					_g.line(Vector2(px + 8, top), Vector2(px + 4, py), c.lightened(0.2), 2.0)
 
 
 func _truss(top: Vector2, length: float, c: Color) -> void:
 	var w := 10.0
-	draw_rect(Rect2(top.x - w, top.y, 3, length), c)
-	draw_rect(Rect2(top.x + w - 3, top.y, 3, length), c)
+	_g.rect(Rect2(top.x - w, top.y, 3, length), c)
+	_g.rect(Rect2(top.x + w - 3, top.y, 3, length), c)
 	var y := top.y
 	var flip := false
 	while y + 20.0 <= top.y + length:
 		var a := Vector2(top.x - w + 1, y)
 		var b := Vector2(top.x + w - 1, y + 20.0)
-		draw_line(a if not flip else Vector2(b.x, a.y), b if not flip else Vector2(a.x, b.y), c, 2.0)
+		_g.line(a if not flip else Vector2(b.x, a.y), b if not flip else Vector2(a.x, b.y), c, 2.0)
 		y += 20.0
 		flip = not flip
 
@@ -168,8 +187,7 @@ func _shadows() -> void:
 
 
 func _grad(r: Rect2, top: Color, bottom: Color) -> void:
-	draw_polygon(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]),
-			PackedColorArray([top, top, bottom, bottom]))
+	_g.grad(r, top, bottom)
 
 
 func _vine(start: Vector2, length: float) -> void:
@@ -179,10 +197,10 @@ func _vine(start: Vector2, length: float) -> void:
 	while y <= length:
 		pts.append(start + Vector2(sin(y * 0.08 + start.x) * 4.0, y))
 		y += 8.0
-	draw_polyline(pts, green, 2.5, true)
+	_g.polyline(pts, green, 2.5)
 	for i in range(1, pts.size(), 2):
 		var side := -1.0 if i % 4 == 1 else 1.0
-		draw_colored_polygon(PackedVector2Array([pts[i], pts[i] + Vector2(7 * side, -3), pts[i] + Vector2(5 * side, 4)]), green.lightened(0.15))
+		_g.polygon(PackedVector2Array([pts[i], pts[i] + Vector2(7 * side, -3), pts[i] + Vector2(5 * side, 4)]), green.lightened(0.15))
 
 
 func _jungle() -> void:
@@ -192,7 +210,7 @@ func _jungle() -> void:
 		for r in _runs(kind, -1):
 			for x in range(r.position.x * T, r.end.x * T, 6):
 				var hgt := _rng.randf_range(3, 9)
-				draw_line(Vector2(x, r.position.y * T), Vector2(x + _rng.randf_range(-3, 3), r.position.y * T - hgt),
+				_g.line(Vector2(x, r.position.y * T), Vector2(x + _rng.randf_range(-3, 3), r.position.y * T - hgt),
 						grass.darkened(_rng.randf_range(0, 0.3)), 2.0)
 	# Vines from solid undersides.
 	for r in _runs(Level.SOLID, 1):
@@ -206,15 +224,15 @@ func _snow() -> void:
 	for kind in [Level.SOLID, Level.ONEWAY]:
 		for r in _runs(kind, -1):
 			var y := r.position.y * T
-			draw_rect(Rect2(r.position.x * T, y - 3, r.size.x * T, 5), snow)
+			_g.rect(Rect2(r.position.x * T, y - 3, r.size.x * T, 5), snow)
 			for x in range(r.position.x * T + 8, r.end.x * T - 4, 14):
-				draw_circle(Vector2(x, y - 2), _rng.randf_range(3, 6), snow)
+				_g.circle(Vector2(x, y - 2), _rng.randf_range(3, 6), snow)
 	# Icicles under solid blocks.
 	for r in _runs(Level.SOLID, 1):
 		for x in range(r.position.x * T + 6, r.end.x * T - 4, 11):
 			if _rng.randf() < 0.6:
 				var y := (r.position.y + 1) * T
-				draw_colored_polygon(PackedVector2Array([Vector2(x - 3, y), Vector2(x + 3, y), Vector2(x, y + _rng.randf_range(8, 22))]),
+				_g.polygon(PackedVector2Array([Vector2(x - 3, y), Vector2(x + 3, y), Vector2(x, y + _rng.randf_range(8, 22))]),
 						Color(0.75, 0.92, 1.0, 0.85))
 
 
@@ -225,11 +243,11 @@ func _city(th: Dictionary) -> void:
 			continue
 		var y := r.position.y * T
 		var ax := (r.position.x + 1) * T
-		draw_rect(Rect2(ax, y - 14, 26, 14), th.tile.darkened(0.2))
-		draw_rect(Rect2(ax + 4, y - 10, 18, 3), th.tile.lightened(0.1))
+		_g.rect(Rect2(ax, y - 14, 26, 14), th.tile.darkened(0.2))
+		_g.rect(Rect2(ax + 4, y - 10, 18, 3), th.tile.lightened(0.1))
 		var tx := (r.end.x - 1) * T
-		draw_line(Vector2(tx, y), Vector2(tx, y - 46), th.tile.lightened(0.2), 2.0)
-		draw_circle(Vector2(tx, y - 47), 2.5, th.edge)
+		_g.line(Vector2(tx, y), Vector2(tx, y - 46), th.tile.lightened(0.2), 2.0)
+		_g.circle(Vector2(tx, y - 47), 2.5, th.edge)
 
 
 func _stripes() -> void:
@@ -239,13 +257,18 @@ func _stripes() -> void:
 		for ex in [r.position.x * T, r.end.x * T - 18]:
 			for i in 3:
 				var x0: float = ex + i * 6
-				draw_colored_polygon(PackedVector2Array([Vector2(x0, r.position.y * T + 2), Vector2(x0 + 3, r.position.y * T + 2),
+				_g.polygon(PackedVector2Array([Vector2(x0, r.position.y * T + 2), Vector2(x0 + 3, r.position.y * T + 2),
 						Vector2(x0 + 6, r.position.y * T + 8), Vector2(x0 + 3, r.position.y * T + 8)]), y_col)
 
 
 func _draw_lights() -> void:
-	if Settings.quality == 0:              # low quality: no additive lamp/neon glow
-		return
+	if _lg == null:
+		_bake_lights()
+	_lg.draw_on(lights)
+
+
+func _bake_lights() -> void:
+	_lg = StaticDraw.new()
 	var th: Dictionary = level.theme
 	var edge: Color = th.edge
 	_rng.seed = hash(level.def.id) + 1
@@ -259,18 +282,17 @@ func _draw_lights() -> void:
 			var cx := (r.position.x + (i + 0.5) * r.size.x / float(n)) * T
 			var y := (r.position.y + 1) * T
 			var lamp := Rect2(cx - 10, y, 20, 5)
-			lights.draw_rect(lamp, Color(edge, 0.9))
+			_lg.rect(lamp, Color(edge, 0.9))
 			var reach := 170.0
-			lights.draw_polygon(PackedVector2Array([Vector2(cx - 9, y + 5), Vector2(cx + 9, y + 5),
-					Vector2(cx + 70, y + reach), Vector2(cx - 70, y + reach)]),
-					PackedColorArray([Color(edge, 0.16), Color(edge, 0.16), Color(edge, 0.0), Color(edge, 0.0)]))
+			_lg.quad(Vector2(cx - 9, y + 5), Vector2(cx + 9, y + 5), Vector2(cx + 70, y + reach), Vector2(cx - 70, y + reach),
+					Color(edge, 0.16), Color(edge, 0.16), Color(edge, 0.0), Color(edge, 0.0))
 	match _style():
 		"space":
 			for r in _runs(Level.SOLID, 1):
 				for x in range(r.position.x, r.end.x, 3):
 					var p := Vector2(x * T + 16, (r.position.y + 1) * T + 4)
-					lights.draw_circle(p, 9.0, Color(edge, 0.25))
-					lights.draw_circle(p, 4.0, Color(edge, 0.6))
+					_lg.circle(p, 9.0, Color(edge, 0.25))
+					_lg.circle(p, 4.0, Color(edge, 0.6))
 		"city":
 			# Neon signs on building faces.
 			for r in _runs(Level.SOLID, -1):
@@ -278,9 +300,9 @@ func _draw_lights() -> void:
 					continue
 				var sign := Rect2(r.position.x * T + 30, r.position.y * T + 70, r.size.x * T - 60, 26)
 				var col := edge if _rng.randf() < 0.5 else Color("39e1ff")
-				lights.draw_rect(sign, Color(col, 0.12))
-				lights.draw_rect(sign, Color(col, 0.75), false, 2.0)
-				lights.draw_rect(Rect2(sign.position + Vector2(8, 9), Vector2(sign.size.x - 16, 4)), Color(col, 0.55))
+				_lg.rect(sign, Color(col, 0.12))
+				_lg.rect_outline(sign, Color(col, 0.75), 2.0)
+				_lg.rect(Rect2(sign.position + Vector2(8, 9), Vector2(sign.size.x - 16, 4)), Color(col, 0.55))
 		"foundry":
 			for r in _runs(Level.HAZARD, -1):
-				lights.draw_rect(Rect2(r.position.x * T, r.position.y * T - 140, r.size.x * T, 140), Color(edge, 0.05))
+				_lg.rect(Rect2(r.position.x * T, r.position.y * T - 140, r.size.x * T, 140), Color(edge, 0.05))

@@ -13,6 +13,8 @@ through a short room code, then talk to each other directly. Endpoints:
   POST /signal/poll   {"code","token"}       -> {"msgs": [{"from", "msg"}, ...]}
   POST /signal/leave  {"code","token"}
 """
+from __future__ import annotations   # lets the dict[...] annotations below run on Python 3.8
+
 import argparse
 import functools
 import gzip
@@ -27,14 +29,35 @@ import time
 COMPRESS = {".wasm", ".js", ".pck", ".html"}
 _cache: dict[str, tuple[float, bytes]] = {}   # path -> (mtime, gzipped bytes); one entry per file
 
+
+def _gzipped(path: str, mtime: float) -> bytes:
+    hit = _cache.get(path)
+    if hit is None or hit[0] != mtime:
+        with open(path, "rb") as f:
+            hit = _cache[path] = (mtime, gzip.compress(f.read(), 6))
+    return hit[1]
+
+
+def _warm(root: str) -> None:
+    """Gzip the build at startup (the .wasm takes ~2 s) so the first visitor doesn't wait for it."""
+    for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        path = os.path.join(root, name)
+        if os.path.splitext(name)[1] in COMPRESS and os.path.isfile(path):
+            try:
+                _gzipped(path, os.path.getmtime(path))
+            except OSError:
+                pass
+
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O or 1/I mix-ups
 MAX_ROOMS = 100
 MAX_PEERS = 8
 MAX_BODY = 16 * 1024
 MAX_QUEUE = 200
 ROOM_TTL = 15 * 60                                   # seconds of inactivity before a room expires
+PEER_TTL = 15                                        # seconds without a poll before a peer counts as gone
+                                                     # (net.gd polls every 0.25 s as host, 1 s as client)
 
-_rooms: dict[str, dict] = {}   # code -> {"peers": {id: {"token", "queue": []}}, "next": int, "seen": float}
+_rooms: dict[str, dict] = {}   # code -> {"peers": {id: {"token", "queue": [], "seen"}}, "next": int, "seen": float}
 _lock = threading.Lock()
 _lan_url = ""
 
@@ -43,6 +66,13 @@ def _expire_rooms() -> None:
     now = time.time()
     for code in [c for c, r in _rooms.items() if now - r["seen"] > ROOM_TTL]:
         del _rooms[code]
+    # Closed tabs never send "leave": drop clients that stopped polling so they don't fill the room.
+    for room in _rooms.values():
+        for pid in [p for p, peer in room["peers"].items() if p != 1 and now - peer["seen"] > PEER_TTL]:
+            del room["peers"][pid]
+            host = room["peers"].get(1)
+            if host and len(host["queue"]) < MAX_QUEUE:
+                host["queue"].append({"from": pid, "msg": {"type": "left"}})
 
 
 def _peer(body: dict):
@@ -52,7 +82,7 @@ def _peer(body: dict):
         return None, None
     for pid, p in room["peers"].items():
         if secrets.compare_digest(p["token"], str(body.get("token", ""))):
-            room["seen"] = time.time()
+            room["seen"] = p["seen"] = time.time()
             return room, pid
     return None, None
 
@@ -68,18 +98,20 @@ def signal(route: str, body: dict) -> tuple[int, dict]:
             code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(6))
             while code in _rooms:
                 code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(6))
-            token = secrets.token_hex(16)
-            _rooms[code] = {"peers": {1: {"token": token, "queue": []}}, "next": 2, "seen": time.time()}
+            token, now = secrets.token_hex(16), time.time()
+            _rooms[code] = {"peers": {1: {"token": token, "queue": [], "seen": now}}, "next": 2, "seen": now}
             return 200, {"code": code, "id": 1, "token": token}
         if route == "join":
             room = _rooms.get(str(body.get("code", "")).upper())
             if not room or 1 not in room["peers"]:
                 return 404, {"error": "no room with that code"}
+            if time.time() - room["peers"][1]["seen"] > PEER_TTL:
+                return 404, {"error": "host is gone"}
             if len(room["peers"]) >= MAX_PEERS:
                 return 409, {"error": "room is full"}
             pid, token = room["next"], secrets.token_hex(16)
             room["next"] += 1
-            room["peers"][pid] = {"token": token, "queue": []}
+            room["peers"][pid] = {"token": token, "queue": [], "seen": time.time()}
             room["peers"][1]["queue"].append({"from": pid, "msg": {"type": "joined"}})
             room["seen"] = time.time()
             return 200, {"id": pid, "token": token}
@@ -103,7 +135,7 @@ def signal(route: str, body: dict) -> tuple[int, dict]:
             del room["peers"][pid]
             if pid == 1 or not room["peers"]:
                 _rooms.pop(str(body.get("code")).upper(), None)
-            elif 1 in room["peers"]:
+            elif 1 in room["peers"] and len(room["peers"][1]["queue"]) < MAX_QUEUE:
                 room["peers"][1]["queue"].append({"from": pid, "msg": {"type": "left"}})
             return 200, {}
     return 404, {"error": "unknown endpoint"}
@@ -112,6 +144,7 @@ def signal(route: str, body: dict) -> tuple[int, dict]:
 class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
                       ".wasm": "application/wasm", ".pck": "application/octet-stream"}
+    timeout = 10        # socket timeout: a stalled request (e.g. short body, big Content-Length) can't hold a thread
 
     def log_message(self, fmt, *args):
         if "/signal/poll" not in self.path:         # polling is chatty; keep the log readable
@@ -145,10 +178,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not 0 <= length <= MAX_BODY:
             return self._json(413, {"error": "too large"})
         try:
-            body = json.loads(self.rfile.read(length) or b"{}")
+            raw = self.rfile.read(length)
+        except OSError:                              # timed out waiting for the body
+            self.close_connection = True
+            return
+        try:
+            body = json.loads(raw or b"{}")
             if not isinstance(body, dict):
                 raise ValueError
-        except ValueError:
+        except (ValueError, RecursionError):
             return self._json(400, {"error": "bad json"})
         self._json(*signal(self.path[len("/signal/"):].split("?")[0], body))
 
@@ -161,16 +199,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         ext = os.path.splitext(path)[1]
         if ext in COMPRESS and "gzip" in self.headers.get("Accept-Encoding", "") and os.path.isfile(path):
             mtime = os.path.getmtime(path)
-            if path not in _cache or _cache[path][0] != mtime:
-                with open(path, "rb") as f:
-                    _cache[path] = (mtime, gzip.compress(f.read(), 6))
-            body = _cache[path][1]
+            # Validators so reloads revalidate (Cache-Control: no-cache) with a tiny 304 instead of
+            # re-downloading ~15 MB; a rebuild changes size/mtime. Chrome ignores ETag on these HTTP/1.0
+            # responses and won't cache them without Last-Modified, so send both.
+            etag = f'"{os.path.getsize(path):x}-{int(mtime * 1000):x}-gz"'
+            last_mod = self.date_time_string(int(mtime))
+            if etag in self.headers.get("If-None-Match", "") or self.headers.get("If-Modified-Since") == last_mod:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Last-Modified", last_mod)
+                self.send_header("Vary", "Accept-Encoding")
+                self.end_headers()
+                return
+            body = _gzipped(path, mtime)
             self.send_response(200)
             self.send_header("Content-Type", self.guess_type(path))
             self.send_header("Content-Encoding", "gzip")
+            self.send_header("ETag", etag)
+            self.send_header("Last-Modified", last_mod)
+            self.send_header("Vary", "Accept-Encoding")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            # Write in chunks: the socket timeout bounds each sendall() as a whole, so one big write
+            # of the .wasm over slow Wi-Fi could time out mid-download.
+            view = memoryview(body)
+            for i in range(0, len(view), 64 * 1024):
+                self.wfile.write(view[i:i + 64 * 1024])
             return
         super().do_GET()
 
@@ -195,4 +249,5 @@ if __name__ == "__main__":
     print(f"Serving {os.path.abspath(args.dir)}")
     print(f"  this machine: http://localhost:{args.port}")
     print(f"  LAN:          {_lan_url}")
+    threading.Thread(target=_warm, args=(os.path.abspath(args.dir),), daemon=True).start()
     http.server.ThreadingHTTPServer((args.host, args.port), handler).serve_forever()

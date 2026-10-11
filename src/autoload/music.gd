@@ -11,6 +11,7 @@ const SILENT_DB := -40.0
 var current := ""                       # path of the track playing (or fading in)
 var _players: Array[AudioStreamPlayer] = []
 var _active := 0
+var _tweens := {}                       # player -> its running fade Tween
 
 
 func _ready() -> void:
@@ -62,8 +63,14 @@ func stop() -> void:
 		_fade(p, SILENT_DB, true)
 
 
+## One fade per player: a newer fade replaces an older one, so a stale fade-out can't stop()
+## a player that has since started the new track.
 func _fade(p: AudioStreamPlayer, to_db: float, stop_after: bool) -> void:
+	var old: Tween = _tweens.get(p)
+	if old and old.is_valid():
+		old.kill()
 	var tw := create_tween()
+	_tweens[p] = tw
 	tw.tween_property(p, "volume_db", to_db, FADE)
 	if stop_after:
 		tw.tween_callback(p.stop)

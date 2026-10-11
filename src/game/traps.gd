@@ -22,8 +22,9 @@ const LASER_COLOR := Color("ff2e4d")
 var world: Node
 var level: Level
 var _zap_at := {}                   # eid -> next time a laser may hurt them
-var _vent_hit := {}                 # "eid:vent" -> burst id already applied
-var _last_state := {}               # device key -> state (for one-shot fx/sfx)
+var _vent_hit := {}                 # eid * 1024 + vent index -> burst id already applied
+var _laser_state := PackedInt32Array()   # last seen state per laser / vent (one-shot fx/sfx)
+var _vent_state := PackedInt32Array()
 var _glow: Node2D
 
 
@@ -36,6 +37,13 @@ func setup(p_world: Node, p_level: Level) -> void:
 	_glow.material = add
 	_glow.draw.connect(_draw_glow)
 	add_child(_glow)
+	DrawUtil.setup(self)
+	_laser_state.resize(level.lasers.size())
+	_laser_state.fill(OFF)
+	_vent_state.resize(level.vents.size())
+	_vent_state.fill(OFF)
+	# Most maps have no traps: then there is nothing to animate or redraw, ever.
+	set_process(not level.lasers.is_empty() or not level.vents.is_empty())
 
 
 static func cycle_state(t: float, period: float, warn: float, on: float) -> int:
@@ -82,7 +90,7 @@ func server_tick() -> void:
 		var burst := floori((now + d.phase * VENT_PERIOD) / VENT_PERIOD)
 		var r := vent_rect(d)
 		for e: Player in world.alive_players():
-			var key := "%d:%d" % [e.eid, i]
+			var key: int = e.eid * 1024 + i
 			if _vent_hit.get(key, -1) != burst and r.intersects(e.hit_rect()):
 				_vent_hit[key] = burst
 				world.trap_damage(e, VENT_DMG, World.VENT, Vector2(0, -VENT_PUSH), d.pos,
@@ -100,49 +108,58 @@ func _vent_color() -> Color:
 func _process(_delta: float) -> void:
 	# One-shot effects on state changes (sound + particles), purely cosmetic.
 	var fx: Fx = world.fx
+	var changed := false                # any device changed state -> redraw both layers
+	var flicker := false                # a laser is in its warning flicker -> redraw glow
 	for i in level.lasers.size():
 		var d: Dictionary = level.lasers[i]
 		var st := laser_state(d)
-		if st != _last_state.get("l%d" % i, OFF) and st == ON:
-			Sfx.play_at("shock_alt", Vector2(d.x, d.top), -6.0, 1.6)
-		_last_state["l%d" % i] = st
+		if st != _laser_state[i]:
+			changed = true
+			if st == ON:
+				Sfx.play_at("shock_alt", Vector2(d.x, d.top), -6.0, 1.6)
+		flicker = flicker or st == WARN
+		_laser_state[i] = st
+	var c := _vent_color()
 	for i in level.vents.size():
 		var d: Dictionary = level.vents[i]
 		var st := vent_state(d)
-		var c := _vent_color()
 		if st == WARN and randf() < 0.25:
 			fx.emit(d.pos + Vector2(randf_range(-8, 8), -4), Vector2(randf_range(-15, 15), -60), 0.5, 3.0, 8.0, Color(c, 0.35), -20.0, 1.0)
 		elif st == ON:
 			for k in 2:
 				fx.emit(d.pos + Vector2(randf_range(-10, 10), -4), Vector2(randf_range(-40, 40), randf_range(-520, -380)),
 						0.3, 6.0, 14.0, Color(c, 0.5), 0.0, 1.5, true)
-			if _last_state.get("v%d" % i, OFF) != ON:
+			if _vent_state[i] != ON:
 				Sfx.play_at("rocket", d.pos, -4.0, 0.6)
-		_last_state["v%d" % i] = st
-	queue_redraw()
-	_glow.queue_redraw()
+		changed = changed or st != _vent_state[i]
+		_vent_state[i] = st
+	if changed:
+		queue_redraw()
+	if changed or flicker:
+		_glow.queue_redraw()
 
 
 func _draw() -> void:
 	var metal := Color(0.16, 0.18, 0.22)
+	var vc := _vent_color()
 	for d in level.lasers:
 		var st := laser_state(d)
 		var r := Rect2(d.x - 9, d.top, 18, 8)
-		draw_rect(r.grow(1.5), CharPainter.OUTLINE)
-		draw_rect(r, metal)
-		draw_rect(Rect2(d.x - 4, d.top + 8, 8, 4), LASER_COLOR if st != OFF else LASER_COLOR.darkened(0.6))
+		DrawUtil.rect(self, r.grow(1.5), CharPainter.OUTLINE)
+		DrawUtil.rect(self, r, metal)
+		DrawUtil.rect(self, Rect2(d.x - 4, d.top + 8, 8, 4), LASER_COLOR if st != OFF else LASER_COLOR.darkened(0.6))
 		var base := Rect2(d.x - 9, d.bottom - 6, 18, 6)
-		draw_rect(base.grow(1.5), CharPainter.OUTLINE)
-		draw_rect(base, metal)
+		DrawUtil.rect(self, base.grow(1.5), CharPainter.OUTLINE)
+		DrawUtil.rect(self, base, metal)
 		if st == ON:
-			draw_line(Vector2(d.x, d.top + 12), Vector2(d.x, d.bottom - 6), Color(1, 0.85, 0.88), 2.0)
+			DrawUtil.rect(self, Rect2(d.x - 1.0, d.top + 12, 2.0, d.bottom - d.top - 18), Color(1, 0.85, 0.88))
 	for d in level.vents:
 		var p: Vector2 = d.pos
-		draw_rect(Rect2(p + Vector2(-15, -5), Vector2(30, 5)).grow(1.0), CharPainter.OUTLINE)
-		draw_rect(Rect2(p + Vector2(-15, -5), Vector2(30, 5)), metal)
+		DrawUtil.rect(self, Rect2(p + Vector2(-15, -5), Vector2(30, 5)).grow(1.0), CharPainter.OUTLINE)
+		DrawUtil.rect(self, Rect2(p + Vector2(-15, -5), Vector2(30, 5)), metal)
 		var warn := vent_state(d) != OFF
 		for k in 4:
-			draw_rect(Rect2(p + Vector2(-12 + k * 7, -4), Vector2(3, 3)), _vent_color() if warn else Color(0.05, 0.05, 0.07))
+			DrawUtil.rect(self, Rect2(p + Vector2(-12 + k * 7, -4), Vector2(3, 3)), vc if warn else Color(0.05, 0.05, 0.07))
 
 
 func _draw_glow() -> void:
@@ -152,14 +169,14 @@ func _draw_glow() -> void:
 		var a := Vector2(d.x, d.top + 12)
 		var b := Vector2(d.x, d.bottom - 6)
 		if st == WARN and int(t * 16.0) % 2 == 0:
-			_glow.draw_line(a, b, Color(LASER_COLOR, 0.35), 1.5)
+			DrawUtil.rect(_glow, Rect2(d.x - 0.75, a.y, 1.5, b.y - a.y), Color(LASER_COLOR, 0.35))
 		elif st == ON:
-			_glow.draw_line(a, b, Color(LASER_COLOR, 0.35), 14.0)
-			_glow.draw_line(a, b, Color(LASER_COLOR, 0.8), 5.0)
-			_glow.draw_circle(b, 10.0, Color(LASER_COLOR, 0.5))
+			DrawUtil.line(_glow, a, b, Color(LASER_COLOR, 0.35), 14.0)
+			DrawUtil.line(_glow, a, b, Color(LASER_COLOR, 0.8), 5.0)
+			DrawUtil.circle(_glow, b, 10.0, Color(LASER_COLOR, 0.5))
+	var c := _vent_color()
 	for d in level.vents:
 		if vent_state(d) == ON:
 			var r := vent_rect(d)
-			var c := _vent_color()
-			_glow.draw_polygon(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]),
-					PackedColorArray([Color(c, 0.0), Color(c, 0.0), Color(c, 0.35), Color(c, 0.35)]))
+			DrawUtil.quad4(_glow, r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y),
+					Color(c, 0.0), Color(c, 0.0), Color(c, 0.35), Color(c, 0.35))

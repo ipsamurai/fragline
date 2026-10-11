@@ -230,3 +230,18 @@ func _apply_weights() -> void:
 			if absf(center.x - d.pos.x) < Level.T and center.y <= d.pos.y and center.y >= d.pos.y - 4 * Level.T:
 				w = maxf(w, TRAP_WEIGHT)
 		astar.set_point_weight_scale(id, w)
+
+
+## Link segments grouped by Link type (index = Link value), for the X-Ray overlay.
+func segments_by_type() -> Array[PackedVector2Array]:
+	var out: Array[PackedVector2Array] = []
+	for i in Link.size():
+		out.append(PackedVector2Array())
+	for key: int in _links:
+		var a := key >> 20
+		var b := key & 0xFFFFF
+		if a > b and _links.has((b << 20) | a) and _links[(b << 20) | a] == _links[key]:
+			continue                    # two-way link of the same kind: draw it once
+		out[_links[key]].append(pos_of(a))
+		out[_links[key]].append(pos_of(b))
+	return out

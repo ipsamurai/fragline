@@ -8,6 +8,7 @@ extends Node2D
 signal restart_requested               # results / pause screen: play the same setup again
 signal menu_requested                  # results / pause screen: back to the main menu
 signal died(victim_eid: int, killer_eid: int, wid: int)   # every death, as it's applied
+signal event_applied(kind: int, args: Array)   # every event, everywhere (MatchStats listens)
 
 enum Ev { SPAWN, DIED, HIT, SHOT, PROJ_END, PICKUP, STATUS, END, JOIN, LEAVE }
 
@@ -41,6 +42,9 @@ var projectiles: Projectiles
 var pickups: Pickups
 var traps: Traps
 var _nav: NavGraph                     # built on first use (only bots need it)
+static var _nav_cache := {}            # map id -> NavGraph (levels are deterministic, so reuse them)
+var _alive: Array[Player] = []
+var _alive_dirty := true
 var hud: Hud
 var players_root: Node2D
 var gravity_scale := 1.0
@@ -53,6 +57,16 @@ var clock := 0.0                       # match time; pauses with the game
 var paused := false
 var frag_limit := 15
 var ended := false
+var _winner_eid := 0
+var _killer_eid := 0                   # who fragged you last (the death cam follows them)
+var _last_death_pos := Vector2.ZERO
+var _hitstop_until := 0                # msec (real time) when a kill's hit-pause ends
+const FINALE := 2.4                    # real seconds of slow-mo on the match-winning frag
+var _finale_t := 0.0
+var _finale_pos := Vector2.ZERO
+var _base_zoom := 1.0
+var xray: XRay
+var touch: TouchControls               # phones / tablets: on-screen twin sticks (null on desktop)
 
 var nuke_released := false
 # Training-room options (changed from the training panel).
@@ -62,9 +76,12 @@ var dummy_behaviour := DummyBrain.Behaviour.IDLE
 var dummy_random_weapon := true
 var bot_skill := BotBrain.Skill.REGULAR     # arena bots and the training "Opponent"
 var input_blocked := false             # a UI panel is open: ignore gameplay input
+var panel_open := false                # training panel showing
 
 var demo := false                      # main-menu background: everyone is a bot, no HUD
 var time_limit := 0.0                  # seconds, 0 = no limit (set before setup())
+var game_mode := 0                     # GameMode.DEATHMATCH / GUN_GAME / ... (set before setup())
+var low_gravity := false               # Low Gravity mutator (set before setup())
 var countdown := 0.0
 # Networking (set before setup()).
 var net_role := 0                      # Net.Role: OFFLINE, HOST or CLIENT
@@ -80,6 +97,7 @@ var _shake := 0.0
 func setup(def: Dictionary, dummies: int) -> void:
 	_build_scene(def)
 	_deal_weapons()
+	GameMode.configure(self)
 	local_player = _add_player(my_eid, Player.Mode.LOCAL, Settings.look(), Settings.player_name)
 	if demo:
 		local_player.mode = Player.Mode.BOT
@@ -106,6 +124,8 @@ func setup(def: Dictionary, dummies: int) -> void:
 		e.respawn_at = delay
 		delay += 0.15
 	_finish_setup()
+	if dummies > 0 or demo:
+		get_nav()                                    # build now, not on the first bot tick at "FIGHT!"
 
 
 ## Network client: rebuild the host's match from its description (see describe()).
@@ -117,6 +137,8 @@ func setup_client(info: Dictionary) -> void:
 			def = d
 	frag_limit = int(info.get("frag_limit", 15))
 	time_limit = float(info.get("time_limit", 0.0))
+	game_mode = GameMode.sanitize(info.get("mode", 0))
+	low_gravity = bool(info.get("lowgrav", false))
 	_build_scene(def)
 	clock = float(info.get("clock", 0.0))
 	countdown = float(info.get("countdown", 0.0))
@@ -131,6 +153,7 @@ func setup_client(info: Dictionary) -> void:
 		roster[eid].bot = bool(row[7])
 		if row[3]:
 			e.spawn_at(row[4])
+			_alive_dirty = true
 			e.protect_time = 0.0
 	local_player = entities.get(my_eid)
 	var states: Array = info.get("pickups", [])
@@ -141,7 +164,10 @@ func setup_client(info: Dictionary) -> void:
 		it.wid = int(st[1])
 		it.respawn_at = clock + float(st[2])
 		it.dormant = bool(st[3])
+	GameMode.configure(self)
 	_finish_setup()
+	if info.get("ended", false):                     # joined on the results screen
+		apply_event(Ev.END, [int(info.get("winner", 0))])
 
 
 ## Everything needed to join a running match (sent by the host to new clients).
@@ -154,7 +180,8 @@ func describe() -> Dictionary:
 	for it in pickups.items:
 		states.append([it.active, it.wid, maxf(0.0, it.respawn_at - clock), it.dormant])
 	return {"map": map_def.id, "frag_limit": frag_limit, "time_limit": time_limit, "clock": clock,
-			"countdown": countdown, "nuke": nuke_released, "players": players, "pickups": states}
+			"countdown": countdown, "nuke": nuke_released, "players": players, "pickups": states,
+			"ended": ended, "winner": _winner_eid, "mode": game_mode, "lowgrav": low_gravity}
 
 
 func _build_scene(def: Dictionary) -> void:
@@ -209,10 +236,20 @@ func _finish_setup() -> void:
 	hud.world = self
 	add_child(hud)
 	hud.visible = not demo
+	if not demo:
+		add_child(MatchStats.new(self))           # per-player stats for the results screen
+	if net_role == Net.Role.OFFLINE:
+		xray = XRay.new()
+		xray.world = self
+		add_child(xray)
 	if training:
 		var panel := TrainingPanel.new()
 		panel.world = self
 		add_child(panel)
+	if not demo and TouchControls.wanted():
+		touch = TouchControls.new()
+		touch.world = self
+		add_child(touch)
 	if not demo:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 
@@ -236,6 +273,7 @@ func is_net_client() -> bool:
 
 
 func _exit_tree() -> void:
+	Engine.time_scale = 1.0
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().paused = false
 
@@ -245,6 +283,7 @@ func _add_player(eid: int, mode: Player.Mode, look: Dictionary, pname: String) -
 	p.setup(self, eid, mode, look, pname)
 	players_root.add_child(p)
 	entities[eid] = p
+	_alive_dirty = true
 	roster[eid] = {"name": pname, "kills": 0, "deaths": 0, "bot": mode == Player.Mode.BOT}
 	return p
 
@@ -289,6 +328,22 @@ func round_progress() -> float:
 	if time_limit > 0.0:
 		p = maxf(p, 1.0 - time_left() / time_limit)
 	return p
+
+
+## Outright leader by frags, or 0 when the top score is shared (a draw).
+func _winner() -> int:
+	var best := -1000000
+	var who := 0
+	var shared := false
+	for eid in roster:
+		var k: int = roster[eid].kills
+		if k > best:
+			best = k
+			who = eid
+			shared = false
+		elif k == best:
+			shared = true
+	return 0 if shared else who
 
 
 func _leader() -> int:
@@ -337,6 +392,7 @@ func clear_dummies() -> void:
 		if entities[eid].mode == Player.Mode.BOT:
 			entities[eid].queue_free()
 			entities.erase(eid)
+			_alive_dirty = true
 			roster.erase(eid)
 
 
@@ -369,20 +425,30 @@ func _equip_dummy(e: Player) -> void:
 	e.weapon = wid
 
 
+## Living fighters. Cached: rebuilt only after someone spawns, dies, joins or leaves
+## (called many times per tick by projectiles, traps, bots and the rules).
+## Callers must not modify the returned array.
 func alive_players() -> Array[Player]:
-	var out: Array[Player] = []
-	for e: Player in entities.values():
-		if e.alive:
-			out.append(e)
-	return out
+	if _alive_dirty:
+		_alive_dirty = false
+		_alive = []                    # fresh array: loops over the old one stay valid
+		for e: Player in entities.values():
+			if e.alive:
+				_alive.append(e)
+	return _alive
 
 
 func set_paused(on: bool) -> void:
 	paused = on
-	input_blocked = on
 	if net_role == Net.Role.OFFLINE:                  # a networked match keeps running
 		get_tree().paused = on
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if on else Input.MOUSE_MODE_HIDDEN
+	refresh_input_state()
+
+
+## Gameplay input and the cursor follow every overlay at once (pause, training panel, results).
+func refresh_input_state() -> void:
+	input_blocked = paused or panel_open
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if paused or panel_open or ended else Input.MOUSE_MODE_HIDDEN
 
 
 # --- events ----------------------------------------------------------------------
@@ -394,11 +460,14 @@ func _emit(kind: Ev, args: Array) -> void:
 
 
 func apply_event(kind: Ev, a: Array) -> void:
+	event_applied.emit(kind, a)               # first: some branches below return early (DoT hits)
 	match kind:
 		Ev.SPAWN:
 			var e: Player = entities.get(a[0])
 			if e:
 				e.spawn_at(a[1])
+				_alive_dirty = true
+				GameMode.on_spawn(self, e)
 				if training and e.mode == Player.Mode.BOT:
 					_equip_dummy(e)
 				fx.burst(a[1], e.look.visor, 18, 220.0)
@@ -415,16 +484,28 @@ func apply_event(kind: Ev, a: Array) -> void:
 					roster[a[0]].deaths = a[7]
 			if victim:
 				victim.die()
+				_alive_dirty = true
 				fx.gibs(pos, victim.look, a[4])
+			_last_death_pos = pos
+			if a[0] == my_eid and a[1] != my_eid:
+				_killer_eid = a[1]
+			elif a[1] == my_eid and a[0] != my_eid and _juice_allowed():
+				Engine.time_scale = 0.05                 # hitstop: a 70 ms freeze sells the frag
+				_hitstop_until = Time.get_ticks_msec() + 70
 			Sfx.play_at("death", pos)
+			if a[1] == my_eid and a[0] != my_eid and not demo:   # sfx: you fragged someone
+				Sfx.play("kill_confirm", -4.0)                   # sfx
 			add_shake(6.0, pos)
 			hud.on_death(a[0], a[1], a[2])
+			hud.feed_kill(a[1], a[0], a[2], hud._head_by.get(a[0], 0) == a[1] and clock - float(hud._head_at.get(a[0], -1e9)) <= hud.HEAD_WINDOW)
 			died.emit(a[0], a[1], a[2])
 		Ev.HIT:
 			var victim: Player = entities.get(a[0])
 			var at: Vector2 = a[2]
 			var armored: bool = a[4]
 			var dot: int = a[6]                       # status kind for damage-over-time ticks, else -1
+			if a[5]:
+				hud.note_headshot(a[0], a[3])
 			if dot >= 0:
 				if a[3] == my_eid and a[0] != my_eid:
 					fx.text(at - Vector2(0, 26), str(a[1]), Status.INFO[dot].color)
@@ -435,8 +516,12 @@ func apply_event(kind: Ev, a: Array) -> void:
 				victim.hurt_flash = 0.12
 			var src: Player = entities.get(a[3])
 			var away := (at - src.global_position).normalized() if src else Vector2.UP
-			fx.sparks(at, away, Color(1, 0.85, 0.4) if armored else Color(1, 0.25, 0.35), 7)
+			fx.body_hit(at, away, victim.look.visor if victim else Color(1, 0.25, 0.35), armored, a[1], a[5])
 			Sfx.play_at("hit_armor" if armored else "hit", at, -4.0)
+			if a[5]:                                                  # sfx: headshot crack at the victim
+				Sfx.play_at("headshot", at, -2.0)                     # sfx
+				if a[3] == my_eid and a[0] != my_eid and not demo:    # sfx: and a ping for the shooter
+					Sfx.play("headshot", -9.0, 1.15)                  # sfx
 			if a[3] == my_eid and a[0] != my_eid:
 				hud.hit_marker(a[5])
 				fx.text(at - Vector2(0, 26), str(a[1]), Color(1, 0.8, 0.2) if a[5] else Color.WHITE)
@@ -452,7 +537,13 @@ func apply_event(kind: Ev, a: Array) -> void:
 			if e:
 				e.pose.flash = 0.06
 			var beam: String = st.get("beam", "")
-			fx.muzzle(origin, color)
+			var aim := Vector2.from_angle(e.aim) if e else Vector2.RIGHT
+			if not a[4].is_empty() and origin.distance_squared_to(a[4][0]) > 1.0:
+				aim = origin.direction_to(a[4][0])
+			elif a.size() > 5 and not a[5].is_empty():
+				aim = (a[5][0][3] as Vector2).normalized()
+			fx.muzzle_flash(origin, aim, color, wid, a[2])
+			fx.casing(origin, aim, wid, a[2])
 			# The plasma wave fires 20x/s; only voice some of those shots.
 			if beam != "plasma" or randf() < 0.3:
 				Sfx.play_at(st.sound, origin, -3.0 if beam != "plasma" else -9.0, 1.0 if beam != "ghost" else 0.7)
@@ -462,18 +553,25 @@ func apply_event(kind: Ev, a: Array) -> void:
 					"shock":
 						fx.line(origin, end, color, 9.0, 0.35)
 						fx.sparks(end, back, color, 10)
+						fx.impact(end, -back, color, Fx.HIT_SHOCK)
 					"plasma":
 						fx.line(origin, end, color, 7.0, 0.07, true)
 						if randf() < 0.4:
 							fx.sparks(end, back, color, 2, 160.0)
+							fx.impact(end, -back, color, Fx.HIT_PLASMA)
 					"ghost":
 						fx.line(origin, end, Color(0.75, 0.95, 1.0), 14.0, 0.45)
+						fx.tracer(origin, end, Color(0.75, 0.95, 1.0), 6.0, 0.25)
 					_:
 						var sniper := wid == Weapons.SNIPER
 						fx.line(origin, end, color, 5.0 if sniper else 2.5, 0.3 if sniper else 0.09)
-						fx.sparks(end, back, color, 3, 220.0)
+						fx.tracer(origin, end, color, 4.0 if sniper else 2.5, 0.16 if sniper else 0.08)
+						if sniper:
+							fx.vapor(origin, end)
+						fx.impact(end, -back, color, Fx.HIT_SNIPER if sniper else Fx.HIT_BULLET)
 			if a[0] == my_eid:
 				add_shake(st.shake * 0.6)
+				add_kick(-aim.rotated(randf_range(-0.3, 0.3)), st.shake * (2.6 if wid == Weapons.SNIPER else 1.5))
 			if is_net_client() and a.size() > 5:
 				for sp: Array in a[5]:
 					projectiles.spawn_visual(sp[0], sp[1], sp[2], sp[3], a[0], wid)
@@ -485,24 +583,27 @@ func apply_event(kind: Ev, a: Array) -> void:
 			var def: Dictionary = Weapons.PROJ.get(key, {})
 			match key:
 				"combo":
-					fx.explosion(pos, 190.0, Color("b388ff"))
+					fx.explosion(pos, 190.0, Color("b388ff"), Fx.ENERGY)
 					Sfx.play_at("combo", pos)
 					add_shake(12.0, pos)
+					add_kick(_cam_pos - pos, 7.0, pos)
 				"redeemer":
-					fx.explosion(pos, 420.0, Color.WHITE)
+					fx.explosion(pos, 420.0, Color.WHITE, Fx.NUKE)
 					Sfx.play_at("nuke", pos, 4.0)
 					add_shake(28.0, pos)
+					add_kick(_cam_pos - pos, 16.0, pos)
 					hud.flash(0.8)
 				_:
 					if def.has("splash") and def.splash >= 100.0:
 						fx.explosion(pos, def.splash, def.color)
 						Sfx.play_at("explode", pos)
 						add_shake(9.0, pos)
+						add_kick(_cam_pos - pos, 6.0, pos)
 					elif def.has("splash"):
-						fx.explosion(pos, def.splash * 1.5, def.color)
+						fx.explosion(pos, def.splash * 1.5, def.color, Fx.ENERGY)
 						Sfx.play_at("shock_alt", pos, -2.0, 0.7)
 					else:
-						fx.sparks(pos, Vector2.UP, def.get("color", Color.WHITE), 5, 200.0)
+						fx.pop(pos, def.get("color", Color.WHITE), key == "pulse")
 		Ev.STATUS:
 			var e: Player = entities.get(a[0])
 			if e == null or not e.alive:
@@ -525,8 +626,10 @@ func apply_event(kind: Ev, a: Array) -> void:
 				it.wid = a[3]
 			if it.active and it.dormant:
 				it.dormant = false
-				hud.message("THE REDEEMER IS ONLINE", "Find it before someone else does", Color.WHITE, 3.0)
-				Sfx.play("pickup_power", 0.0, 0.6)
+				hud.message("THE REDEEMER IS ONLINE", "Find it before someone else does", Color.WHITE, 3.0, 3, 3)
+				if not demo:
+					Sfx.play("pickup_power", 0.0, 0.6)
+				hud._announce("The Redeemer is online!", Announcer.HIGH)
 			if not it.active:
 				it.wait = pickups.respawn_time(it)
 				it.respawn_at = clock + it.wait
@@ -538,18 +641,24 @@ func apply_event(kind: Ev, a: Array) -> void:
 				fx.burst(it.pos, pickups.color_of(it), 8, 120.0)
 		Ev.END:
 			ended = true
+			if _juice_allowed():
+				_finale_t = FINALE
+				_finale_pos = _last_death_pos
+				_hitstop_until = 0
+				Engine.time_scale = 0.25
 			hud.show_end(a[0])
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		Ev.JOIN:
 			if not entities.has(a[0]):
 				_add_player(a[0], Player.Mode.PUPPET, Characters.sanitize(a[2]), Characters.clean_name(a[1]))
-				hud.message("%s joined" % Characters.clean_name(a[1]), "", UiTheme.ACCENT, 1.6)
+			hud.message("%s joined" % Characters.clean_name(a[1]), "", UiTheme.ACCENT, 1.6)
 		Ev.LEAVE:
 			var gone: Player = entities.get(a[0])
 			if gone:
 				hud.message("%s left" % gone.display_name, "", Color(1, 1, 1, 0.8), 1.6)
 				gone.queue_free()
 				entities.erase(a[0])
+				_alive_dirty = true
 				roster.erase(a[0])
 
 
@@ -560,11 +669,18 @@ func _physics_process(delta: float) -> void:
 	_net_t -= delta
 	if ended:
 		return
-	if countdown > 0.0:
+	if countdown > 0.0:                               # announcer: "Three… Two… One… FIGHT!"
+		var before := ceili(countdown) if countdown < COUNTDOWN else ceili(COUNTDOWN) + 1
 		countdown -= delta
 		if countdown <= 0.0:
-			hud.message("FIGHT!", "", UiTheme.ACCENT, 1.0)
-			Sfx.play("pickup_power", -2.0, 1.2)
+			hud.message("FIGHT!", "", UiTheme.ACCENT, 1.2, 3, 3)
+			if not demo:
+				Sfx.play("pickup_power", -2.0, 1.2)
+			hud._announce("Fight!", Announcer.CRITICAL)
+		elif ceili(countdown) < before:
+			hud._announce(Hud.COUNT_SAY[ceili(countdown)], Announcer.CRITICAL)
+	elif time_limit > 0.0:                            # timed match: 5 min / 1 min / 30 s / 10..1 calls
+		hud.time_warnings(time_left())
 	if is_net_client():
 		_client_tick(delta)
 		return
@@ -572,7 +688,7 @@ func _physics_process(delta: float) -> void:
 		_net_t = NET_RATE
 		_send_snapshot()
 	if countdown <= 0.0 and time_limit > 0.0 and time_left() <= 0.0:
-		_end_match(_leader())
+		_end_match(_winner())
 		return
 	for e: Player in entities.values():
 		if not e.alive and clock >= e.respawn_at:
@@ -665,7 +781,7 @@ func request_fire(p: Player, wid: int, alt: bool, origin: Vector2, dir: Vector2)
 
 
 func _server_fire(p: Player, wid: int, alt: bool, origin: Vector2, dir: Vector2) -> void:
-	if not p.alive or not p.owns(wid) or p.in_no_fire_zone():
+	if ended or countdown > 0.0 or not p.alive or not p.owns(wid) or p.in_no_fire_zone() 			or p.has_status(Status.SHOCK):
 		return
 	var st := Weapons.stats(wid, alt)
 	var cost: int = st.get("cost", 1)
@@ -673,6 +789,7 @@ func _server_fire(p: Player, wid: int, alt: bool, origin: Vector2, dir: Vector2)
 		if p.ammo[wid] < cost:
 			return
 		p.ammo[wid] -= cost
+	p.protect_time = 0.0
 	origin = _safe_origin(p, origin)
 	var ends := PackedVector2Array()
 	var spawned := []                                  # [id, key, origin, velocity] for clients
@@ -701,8 +818,13 @@ func _safe_origin(p: Player, origin: Vector2) -> Vector2:
 ## Line of fire: blocked by solid tiles, platforms and spawn barriers.
 func get_nav() -> NavGraph:
 	if _nav == null:
-		_nav = NavGraph.new()
-		_nav.build(level)
+		_nav = _nav_cache.get(map_def.id)
+		if _nav == null:
+			_nav = NavGraph.new()
+			_nav.build(level)
+			_nav_cache[map_def.id] = _nav
+		else:
+			_nav.level = level
 	return _nav
 
 
@@ -746,7 +868,7 @@ func _hitscan(p: Player, wid: int, st: Dictionary, origin: Vector2, d: Vector2) 
 	for h in hits:
 		var victim: Player = h[1]
 		var at := origin.lerp(end, h[0]) if st.get("pierce", false) else end
-		var head := victim.is_head_hit(at)
+		var head: bool = float(st.get("headshot", 1.0)) > 1.0 and victim.is_head_hit(at)
 		var dmg: float = st.dmg * (st.get("headshot", 1.0) if head else 1.0)
 		damage(victim, dmg, p.eid, wid, d * dmg * 5.0, at, head)
 	return end
@@ -807,6 +929,9 @@ func damage(victim: Player, amount: float, attacker_eid: int, wid: int, impulse:
 		amount *= 2.0
 	if attacker_eid == victim.eid and dot < 0:
 		amount *= 0.5
+	amount = GameMode.scale_damage(self, victim, amount, attacker_eid, wid, dot)
+	if amount <= 0.0:
+		return
 	var dmg := maxi(1, roundi(amount))
 	var absorbed := mini(victim.armor, int(dmg * 0.66))
 	victim.armor -= absorbed
@@ -826,11 +951,12 @@ func damage(victim: Player, amount: float, attacker_eid: int, wid: int, impulse:
 
 func _kill(victim: Player, killer_eid: int, wid: int, vel: Vector2) -> void:
 	roster[victim.eid].deaths += 1
-	if killer_eid != victim.eid and roster.has(killer_eid):
-		roster[killer_eid].kills += 1
-	else:
+	if killer_eid == victim.eid:
 		roster[victim.eid].kills -= 1
+	elif roster.has(killer_eid):
+		roster[killer_eid].kills += 1
 	victim.respawn_at = clock + RESPAWN_TIME
+	GameMode.on_kill(self, victim, killer_eid)
 	_emit(Ev.DIED, [victim.eid, killer_eid, wid, victim.global_position, vel,
 			roster[killer_eid].kills if roster.has(killer_eid) else 0, roster[victim.eid].kills, roster[victim.eid].deaths])
 	if frag_limit > 0 and roster.has(killer_eid) and roster[killer_eid].kills >= frag_limit:
@@ -838,6 +964,7 @@ func _kill(victim: Player, killer_eid: int, wid: int, vel: Vector2) -> void:
 
 
 func _end_match(winner: int) -> void:
+	_winner_eid = winner
 	_emit(Ev.END, [winner])
 
 
@@ -875,13 +1002,15 @@ func _check_pickups() -> void:
 
 ## Apply a pickup's effect; false if the player can't use it (full health, max ammo...).
 func _give(e: Player, it: Dictionary) -> bool:
+	if not GameMode.item_allowed(self, it):
+		return false
 	match it.type:
 		"h", "H":
 			var cap := 100 if it.type == "h" else 199
 			var poisoned := e.has_status(Status.POISON)
 			if e.health >= cap and not poisoned:
 				return false
-			e.health = mini(cap, e.health + (25 if it.type == "h" else 100))
+			e.health = maxi(e.health, mini(cap, e.health + (25 if it.type == "h" else 100)))
 			if poisoned:
 				_emit(Ev.STATUS, [e.eid, Status.POISON, 0.0, 0, 0])   # health cures poison
 		"a":
@@ -980,6 +1109,7 @@ func client_snapshot(host_clock: float, eids: PackedInt32Array, data: PackedFloa
 		e.amp_time = 1.0 if flags & 4 else 0.0
 		if flags & 1 and not e.alive:                 # joined mid-life: show them
 			e.spawn_at(Vector2(data[i], data[i + 1]))
+			_alive_dirty = true
 
 
 ## Client: our movement goes to the host; the spawn-room meter runs locally for the HUD.
@@ -987,7 +1117,7 @@ func _client_tick(delta: float) -> void:
 	if _net_t <= 0.0 and local_player and local_player.alive:
 		_net_t = NET_RATE
 		Net.c_state.rpc_id(1, local_player.pack_state())
-	if local_player and local_player.alive:
+	if local_player and local_player.alive and countdown <= 0.0:
 		var inside := level.zone_at(local_player.global_position) >= 0
 		if inside:
 			local_player.zone_time += delta
@@ -1027,13 +1157,15 @@ func host_client_state(peer: int, data: PackedFloat32Array) -> void:
 ## Host: a client wants to fire. Validate rate and position, then run it like any shot.
 func host_client_fire(peer: int, wid: int, alt: bool, origin: Vector2, dir: Vector2) -> void:
 	var e: Player = entities.get(peer)
-	if e == null or not e.alive or wid < 0 or wid >= Weapons.COUNT or countdown > 0.0:
+	if e == null or not e.alive or wid < 0 or wid >= Weapons.COUNT or countdown > 0.0 or ended:
 		return
 	if dir == Vector2.ZERO or not dir.is_finite() or not origin.is_finite():
 		return
-	if clock < _next_fire.get(peer, 0.0):
+	var rate := float(Weapons.stats(wid, alt).rate)
+	var t: float = maxf(_next_fire.get(peer, -INF), clock - 2.0 * rate)   # up to ~2 banked shots
+	if t > clock:
 		return
-	_next_fire[peer] = clock + float(Weapons.stats(wid, alt).rate) * 0.75
+	_next_fire[peer] = t + rate * 0.9
 	var shoulder := e.global_position + Player.SHOULDER
 	if origin.distance_to(shoulder) > 80.0:
 		origin = shoulder
@@ -1063,6 +1195,12 @@ func _fit_zoom() -> void:
 	var view := get_viewport().get_visible_rect().size
 	var z := maxf(maxf(view.x / VIEW_WORLD.x, view.y / VIEW_WORLD.y), maxf(view.x / level.size_px.x, view.y / level.size_px.y))
 	camera.zoom = Vector2(z, z)
+	_base_zoom = z
+
+
+## Hitstop / slow-mo only where we own the clock: offline, not the menu's background match.
+func _juice_allowed() -> bool:
+	return net_role == Net.Role.OFFLINE and not demo
 
 
 func add_shake(amount: float, at := Vector2.INF) -> void:
@@ -1073,13 +1211,40 @@ func add_shake(amount: float, at := Vector2.INF) -> void:
 	_shake = maxf(_shake, amount)
 
 
+## Directional camera nudge (weapon recoil, blast push); Fx applies and decays it via
+## camera.offset. `at` attenuates with distance like add_shake.
+func add_kick(dir: Vector2, amount: float, at := Vector2.INF) -> void:
+	if not Settings.screen_shake or demo:
+		return
+	if at != Vector2.INF:
+		amount *= clampf(1.0 - _cam_pos.distance_to(at) / 900.0, 0.0, 1.0)
+	fx.kick(dir, amount)
+
+
 func _process(delta: float) -> void:
-	if local_player.alive:
+	var real_delta := delta / maxf(Engine.time_scale, 0.01)
+	if _hitstop_until > 0 and Time.get_ticks_msec() >= _hitstop_until:
+		_hitstop_until = 0
+		if _finale_t <= 0.0:
+			Engine.time_scale = 1.0
+	if _finale_t > 0.0:
+		# Match-winning frag: slow-mo that eases back to full speed, camera pushed in on it.
+		_finale_t = maxf(0.0, _finale_t - real_delta)
+		var k := _finale_t / FINALE
+		Engine.time_scale = lerpf(1.0, 0.25, k * k) if _finale_t > 0.0 else 1.0
+		var push := minf(1.0, (1.0 - k) * 5.0) * minf(1.0, k * 3.0)   # quick push in, ease back out
+		camera.zoom = Vector2.ONE * _base_zoom * (1.0 + 0.3 * smoothstep(0.0, 1.0, push))
+		_cam_pos = _cam_pos.lerp(_finale_pos, 1.0 - exp(-6.0 * real_delta))
+	elif local_player.alive:
 		var target := local_player.visual_position()
 		# Look-ahead toward the mouse so you can see where you're shooting.
-		var to_mouse := get_global_mouse_position() - target
+		var look_pt := target + touch.aim_dir * 400.0 if touch and touch.active else get_global_mouse_position()
+		var to_mouse := look_pt - target
 		target += to_mouse.limit_length(600.0) * 0.25
 		_cam_pos = _cam_pos.lerp(target, 1.0 - exp(-10.0 * delta))
+	elif entities.has(_killer_eid) and entities[_killer_eid].alive and not ended:
+		# Death cam: watch the player who fragged you until you respawn.
+		_cam_pos = _cam_pos.lerp(entities[_killer_eid].visual_position(), 1.0 - exp(-4.0 * real_delta))
 	_shake = lerpf(_shake, 0.0, 1.0 - exp(-9.0 * delta))
 	camera.global_position = _cam_pos + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake
 	background.follow(camera.get_screen_center_position())

@@ -19,3 +19,6 @@ NOTES*.md
 TODO*.md
 docs/internal/
 planning/
+
+# Source asset packs (extracted copies live outside the repo)
+*.zip

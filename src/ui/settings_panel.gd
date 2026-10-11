@@ -5,6 +5,7 @@ extends TabContainer
 
 var _rebinding := ""                    # action waiting for a key press
 var _bind_buttons := {}                 # action -> Button
+var _bind_msg: Label                    # feedback after a rebind (swapped / refused)
 
 
 func _ready() -> void:
@@ -73,6 +74,7 @@ func _audio() -> VBoxContainer:
 	box.add_child(_row("Master volume", _slider(Settings.master_volume, func(v: float) -> void: Settings.master_volume = v)))
 	box.add_child(_row("Music", _slider(Settings.music_volume, func(v: float) -> void: Settings.music_volume = v)))
 	box.add_child(_row("Sound effects", _slider(Settings.sfx_volume, func(v: float) -> void: Settings.sfx_volume = v)))
+	box.add_child(_row("Announcer voice", _toggle(Settings.announcer, func(v: bool) -> void: Settings.announcer = v)))
 	return box
 
 
@@ -80,12 +82,17 @@ func _graphics() -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_child(_row("Quality", _choice(["Low — older laptops", "High"], Settings.quality,
 			func(i: int) -> void: Settings.quality = i)))
+	box.add_child(_row("Auto quality", _toggle(Settings.auto_quality, func(v: bool) -> void: Settings.auto_quality = v)))
 	box.add_child(_row("Screen shake", _toggle(Settings.screen_shake, func(v: bool) -> void: Settings.screen_shake = v)))
+	# Read the real window mode: on the web the browser can leave fullscreen on its own (Esc),
+	# and a saved "fullscreen" isn't applied at startup there (browsers need a click first).
+	var mode := DisplayServer.window_get_mode()
+	Settings.fullscreen = mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
 	box.add_child(_row("Fullscreen", _toggle(Settings.fullscreen, func(v: bool) -> void:
 		Settings.fullscreen = v
 		Settings.apply_display())))
 	box.add_child(_row("Show FPS counter", _toggle(Settings.show_fps, func(v: bool) -> void: Settings.show_fps = v)))
-	box.add_child(UiTheme.label("Low quality halves particle effects and turns off lamp glow.", "Muted"))
+	box.add_child(UiTheme.label("Low quality halves particle effects and turns off lamp glow. Auto quality switches to Low if a match keeps dropping frames.", "Muted"))
 	return box
 
 
@@ -97,9 +104,12 @@ func _controls() -> VBoxContainer:
 		b.pressed.connect(_start_rebind.bind(action))
 		_bind_buttons[action] = b
 		box.add_child(_row(Settings.ACTION_LABELS[action], b))
+	_bind_msg = UiTheme.label("", "Muted")
+	box.add_child(_bind_msg)
 	box.add_child(UiTheme.label("Mouse: left = fire, right = alt fire, wheel = switch weapon. Keys 1–9 pick weapons.", "Muted"))
 	var reset := UiTheme.button("Reset to defaults", func() -> void:
 		Settings.reset_bindings()
+		_bind_msg.text = ""
 		_refresh_bindings())
 	reset.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	box.add_child(reset)
@@ -128,7 +138,7 @@ func _input(event: InputEvent) -> void:
 		return
 	var key: int = (event as InputEventKey).physical_keycode
 	if key != KEY_ESCAPE:                      # Esc cancels
-		Settings.rebind(_rebinding, key)
+		_bind_msg.text = Settings.rebind(_rebinding, key)
 	_rebinding = ""
 	_refresh_bindings()
 	get_viewport().set_input_as_handled()

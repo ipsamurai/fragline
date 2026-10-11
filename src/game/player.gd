@@ -144,9 +144,12 @@ func is_head_hit(p: Vector2) -> bool:
 	return p.y < global_position.y - 14.0
 
 
+## Barrel tip of the held pixel-art gun (matches CharPainter: trigger hand HAND_REACH along the
+## aim from the shoulder, sprite grip at the hand, mirrored vertically when aiming left).
 func muzzle() -> Vector2:
-	var length: float = Weapons.LIST[weapon].gun_len
-	return global_position + SHOULDER + Vector2.from_angle(aim) * (16.0 + length)
+	var m := GunSprites.muzzle_offset(weapon) * GunSprites.hold_scale(weapon)
+	m.y *= facing()
+	return global_position + SHOULDER + Vector2.from_angle(aim) * CharPainter.HAND_REACH + m.rotated(aim)
 
 
 # --- life cycle ------------------------------------------------------------------
@@ -226,8 +229,8 @@ func select_weapon(wid: int) -> void:
 		return
 	weapon = wid
 	_fire_cd = maxf(_fire_cd, 0.18)
-	if mode == Mode.LOCAL:
-		Sfx.play("weapon_switch", -8.0)
+	_low_ammo_latched = _is_low_ammo()     # switching to a low weapon doesn't count as a crossing
+	_play_equip(wid)
 
 
 func cycle_weapon(dir: int) -> void:
@@ -252,6 +255,84 @@ func on_new_weapon(wid: int) -> void:
 		select_weapon(wid)
 
 
+# --- audio hooks (sfx): equip, flak pump, low-ammo warning, falling wind ------------------
+
+const LOW_AMMO_DIV := 5                # warn at <= 1/5 (20%) of max ammo
+const FALL_SFX_SPEED := 900.0          # falling faster than this plays the wind loop
+const FALL_SFX_DB := -6.0
+const PUMP_DELAY := 0.35               # Flak primary: pump-action sound after each shot
+static var _equip_names := PackedStringArray()   # per weapon id: "equip_N" if present, else "weapon_switch"
+var _low_ammo_latched := false         # already warned for this crossing below 20%
+var _pump_t := 0.0                     # > 0: flak pump pending (counts down in _audio_tick)
+var _equip_quiet_until := 0            # msec; rate-limits bot equip sounds
+var _fall_snd: AudioStreamPlayer2D     # local player's wind loop (child of this node)
+var _fall_k := 0.0                     # wind loop volume, 0..1
+
+
+static func _sound_exists(n: String) -> bool:
+	return ResourceLoader.exists("res://assets/audio/%s.ogg" % n) \
+			or ResourceLoader.exists("res://assets/audio/%s.wav" % n)
+
+
+## Equip sound for a weapon switch: loud and non-positional for "you", quiet in-world for bots.
+func _play_equip(wid: int) -> void:
+	if mode == Mode.PUPPET:
+		return
+	if _equip_names.is_empty():
+		for w in Weapons.COUNT:
+			var n := "equip_%d" % w
+			_equip_names.append(n if _sound_exists(n) else "weapon_switch")
+	if mode == Mode.LOCAL:
+		if not world.demo:
+			Sfx.play(_equip_names[wid], -3.0)
+		return
+	var now := Time.get_ticks_msec()
+	if now >= _equip_quiet_until:
+		_equip_quiet_until = now + 600
+		Sfx.play_at(_equip_names[wid], global_position, -12.0)
+
+
+func _is_low_ammo() -> bool:
+	return not Weapons.infinite(weapon) and ammo[weapon] * LOW_AMMO_DIV <= Weapons.max_ammo(weapon)
+
+
+## Called right after a shot is requested (ammo already spent on this machine).
+func _after_fire_audio(alt: bool) -> void:
+	if weapon == Weapons.FLAK and not alt:
+		_pump_t = PUMP_DELAY
+	if mode != Mode.LOCAL:
+		return
+	var low := _is_low_ammo()
+	if low and not _low_ammo_latched and ammo[weapon] > 0 and not world.demo:
+		Sfx.play("low_ammo", -4.0)
+	_low_ammo_latched = low
+
+
+## Per-frame audio upkeep: the pending flak pump (everyone) and the falling wind (local only).
+func _audio_tick(delta: float) -> void:
+	if _pump_t > 0.0:
+		_pump_t -= delta
+		if _pump_t <= 0.0 and alive and weapon == Weapons.FLAK:
+			Sfx.play_at("flak_pump", global_position, -6.0 if mode == Mode.LOCAL else -11.0)
+	if mode != Mode.LOCAL and _fall_snd == null:
+		return
+	if mode != Mode.LOCAL or not alive or is_on_floor():
+		_fall_k = 0.0                   # landed / died: cut immediately (land/death sounds cover it)
+	else:
+		var falling: bool = velocity.y > FALL_SFX_SPEED and not _climbing and not world.demo
+		_fall_k = move_toward(_fall_k, 1.0 if falling else 0.0, delta * (2.5 if falling else 4.0))
+	if _fall_k <= 0.0:
+		if _fall_snd:
+			_fall_snd.queue_free()
+			_fall_snd = null
+		return
+	if _fall_snd == null:
+		_fall_snd = Sfx.loop_at("fall_loop", self, global_position, -60.0)
+		if _fall_snd == null:           # muted or file missing
+			return
+	_fall_snd.volume_db = FALL_SFX_DB + linear_to_db(_fall_k)
+
+
 # --- per-frame -------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
@@ -266,6 +347,18 @@ func _physics_process(delta: float) -> void:
 			status.erase(k)
 	if mode == Mode.PUPPET:
 		_puppet_step(delta)
+		return
+	if world.ended:
+		# Results screen: nobody keeps running or shooting; gravity still settles everyone.
+		in_move = 0.0
+		in_jump = false
+		in_jump_held = false
+		in_down = false
+		in_down_held = false
+		in_dodge = false
+		in_fire = false
+		in_alt = false
+		_simulate(delta)
 		return
 	if mode == Mode.LOCAL:
 		_read_local_input()
@@ -298,6 +391,23 @@ func _read_local_input() -> void:
 		in_dodge = false
 		in_fire = false
 		in_alt = false
+		return
+	var t: TouchControls = world.touch
+	if t and t.active:
+		# Touch: sticks + buttons. Taps also emulate the mouse, so mouse fire is ignored here;
+		# the keyboard still works for movement (e.g. a tablet with a keyboard).
+		in_move = t.move if t.move != 0.0 else Input.get_axis("move_left", "move_right")
+		in_jump = t.jump_pressed or Input.is_action_just_pressed("jump")
+		in_jump_held = t.jump_held or Input.is_action_pressed("jump")
+		in_down = t.down_pressed or Input.is_action_just_pressed("crouch")
+		in_down_held = t.down_held or Input.is_action_pressed("crouch")
+		in_dodge = t.dodge_pressed or Input.is_action_just_pressed("dodge")
+		in_fire = t.fire
+		in_alt = t.alt
+		if t.aim_dir != Vector2.ZERO:
+			aim = t.assisted_aim(self, global_position + SHOULDER)
+		if t.consume_weapon_cycle() > 0:
+			cycle_weapon(1)
 		return
 	in_move = Input.get_axis("move_left", "move_right")
 	in_jump = Input.is_action_just_pressed("jump")
@@ -333,6 +443,9 @@ func _update_fire(delta: float) -> void:
 	if world.is_net_client() and not Weapons.infinite(weapon):
 		ammo[weapon] -= cost            # predicted; the host's inventory updates correct it
 	world.request_fire(self, weapon, alt, muzzle(), Vector2.from_angle(aim))
+	_after_fire_audio(alt)              # sfx: flak pump + low-ammo warning
+	if not has_ammo(weapon):            # e.g. the Redeemer after its one shot: don't wait for a dry click
+		select_weapon(best_weapon())
 
 
 # --- network -------------------------------------------------------------------------
@@ -510,6 +623,7 @@ func _simulate(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	_audio_tick(delta)                  # sfx: flak pump timer + falling wind (runs while dead to clean up)
 	if not alive:
 		return
 	# Interpolate the drawn body between the last two physics positions.
@@ -557,7 +671,8 @@ func _status_visuals() -> void:
 				fx.emit(p, Vector2(randf_range(-20, 20), randf_range(10, 50)), 0.6, 2.5, 0.5, Color(0.9, 0.98, 1.0, 0.9), 60.0, 0.5, true)
 			Status.SHOCK:
 				fx.emit(p, Vector2.from_angle(randf() * TAU) * 180.0, 0.12, 2.0, 0.3, c, 0.0, 0.0, true)
-	skin.modulate = tint
+	if skin.modulate != tint:
+		skin.modulate = tint
 
 
 func visual_position() -> Vector2:
@@ -595,36 +710,44 @@ func _update_pose(delta: float, grounded: bool, speed: float) -> void:
 
 
 func _draw_skin() -> void:
+	# Everything below is DrawUtil (one batched draw call per fighter, shared across fighters);
+	# only the name tag (font texture) breaks the batch.
+	if skin.texture_filter != DrawUtil.FILTER:
+		DrawUtil.setup(skin)
 	if _shadow_y > 0.0:
 		var feet_y := global_position.y + skin.position.y + HALF.y
 		var height := maxf(0.0, _shadow_y - feet_y)
 		var k := clampf(1.0 - height / 200.0, 0.0, 1.0)
 		var center := Vector2(0, _shadow_y - global_position.y - skin.position.y)
 		skin.draw_set_transform(center, 0.0, Vector2(1.0, 0.28))
-		skin.draw_circle(Vector2.ZERO, 16.0 * (0.5 + 0.5 * k), Color(0, 0, 0, 0.35 * k))
+		DrawUtil.circle(skin, Vector2.ZERO, 16.0 * (0.5 + 0.5 * k), Color(0, 0, 0, 0.35 * k))
 		skin.draw_set_transform(Vector2.ZERO)
 	# Damage-amp aura and spawn-protection bubble.
 	if amp_time > 0.0:
-		skin.draw_circle(Vector2(0, -6), 34.0, Color(0.7, 0.3, 1.0, 0.13 + 0.05 * sin(pose.time * 10.0)))
+		DrawUtil.circle(skin, Vector2(0, -6), 34.0, Color(0.7, 0.3, 1.0, 0.13 + 0.05 * sin(pose.time * 10.0)))
 	CharPainter.draw(skin, look, pose)
 	if protect_time > 0.0:
-		skin.draw_arc(Vector2(0, -6), 36.0, 0.0, TAU, 32, Color(look.visor, 0.35 + 0.25 * sin(pose.time * 14.0)), 2.0, true)
+		DrawUtil.thin_ring(skin, Vector2(0, -6), 36.0, Color(look.visor, 0.35 + 0.25 * sin(pose.time * 14.0)))
 	if hurt_flash > 0.0:
-		skin.draw_circle(Vector2(0, -6), 30.0, Color(1, 0.3, 0.3, hurt_flash * 1.5))
+		DrawUtil.circle(skin, Vector2(0, -6), 30.0, Color(1, 0.3, 0.3, hurt_flash * 1.5))
 	_draw_overhead()
 
 
 ## Health bar (green → amber → red, cyan overheal), armour strip under it, name above.
 func _draw_overhead() -> void:
 	const W := 34.0
+	const HP_HI := Color(0.290, 0.871, 0.502)      # 4ade80
+	const AMBER := Color(0.984, 0.749, 0.141)      # fbbf24
+	const HP_LO := Color(0.973, 0.443, 0.443)      # f87171
+	const OVERHEAL := Color(0.220, 0.741, 0.973)   # 38bdf8
 	var top := Vector2(-W * 0.5, -50.0)
-	var hp_col := Color("4ade80") if health > 60 else (Color("fbbf24") if health > 30 else Color("f87171"))
-	skin.draw_rect(Rect2(top - Vector2(1, 1), Vector2(W + 2, 9)), Color(0, 0, 0, 0.55))
-	skin.draw_rect(Rect2(top, Vector2(W * clampf(health / 100.0, 0.0, 1.0), 4)), hp_col)
+	var hp_col := HP_HI if health > 60 else (AMBER if health > 30 else HP_LO)
+	DrawUtil.rect(skin, Rect2(top - Vector2(1, 1), Vector2(W + 2, 9)), Color(0, 0, 0, 0.55))
+	DrawUtil.rect(skin, Rect2(top, Vector2(W * clampf(health / 100.0, 0.0, 1.0), 4)), hp_col)
 	if health > 100:
-		skin.draw_rect(Rect2(top, Vector2(W * (health - 100) / 99.0, 1.5)), Color("38bdf8"))
+		DrawUtil.rect(skin, Rect2(top, Vector2(W * (health - 100) / 99.0, 1.5)), OVERHEAL)
 	if armor > 0:
-		skin.draw_rect(Rect2(top + Vector2(0, 5), Vector2(W * minf(armor / 150.0, 1.0), 2)), Color("fbbf24"))
+		DrawUtil.rect(skin, Rect2(top + Vector2(0, 5), Vector2(W * minf(armor / 150.0, 1.0), 2)), AMBER)
 	if mode != Mode.LOCAL:
 		skin.draw_string(ThemeDB.fallback_font, Vector2(-60, -55), display_name, HORIZONTAL_ALIGNMENT_CENTER,
 				120, 12, Color(1, 1, 1, 0.75))

@@ -30,6 +30,8 @@ var dummy_spawns: Array[Vector2] = []    # training-room dummy spots ("T")
 var pickups: Array[Dictionary] = []    # {type: "h"/"H"/"a"/"D"/"w", wid, pos}
 var size_px := Vector2.ZERO
 var _panel: Texture2D                  # must outlive _draw(): canvas commands only hold its RID
+var _tiles_g: StaticDraw               # baked tile layer (meshes must outlive _draw() too)
+var _shapes_g: StaticDraw
 
 
 
@@ -292,14 +294,25 @@ func _panel_texture() -> Texture2D:
 
 
 func _draw() -> void:
+	if _tiles_g == null:
+		_bake_graphics()
+	# Two meshes = two draw calls for the whole tile layer, whatever the map size.
+	_tiles_g.draw_on(self, _panel)
+	_shapes_g.draw_on(self, StaticDraw.disc())
+
+
+## Records the static tile layer into meshes (once per level; see StaticDraw).
+func _bake_graphics() -> void:
 	var tile: Color = theme.tile
 	var edge: Color = theme.edge
 	if _panel == null:
 		_panel = _panel_texture()
-	var tex := _panel
-	# Solid blocks: one tiled draw per merged rect.
+	_tiles_g = StaticDraw.new()
+	var g := StaticDraw.new()
+	_shapes_g = g
+	# Solid blocks: tiled panel texture (uv in tile units; texture_repeat is on).
 	for r in _merged_rects(SOLID):
-		draw_texture_rect(tex, Rect2(r.position * T, r.size * T), true, tile)
+		_tiles_g.rect_uv(Rect2(r.position * T, r.size * T), tile, Rect2(r.position, r.size))
 	# Lit top edges + soft neon lip, darker undersides.
 	var glow_a := Color(edge, 0.28)
 	var glow_b := Color(edge, 0.0)
@@ -312,47 +325,40 @@ func _draw() -> void:
 					x += 1
 				var rx := x0 * T
 				var rw := (x - x0) * T
-				_gradient_rect(Rect2(rx, y * T - 10, rw, 10), glow_b, glow_a)
-				draw_rect(Rect2(rx, y * T, rw, 3), edge)
-				draw_rect(Rect2(rx, y * T + 3, rw, 3), tile.lightened(0.15))
+				g.grad(Rect2(rx, y * T - 10, rw, 10), glow_b, glow_a)
+				g.rect(Rect2(rx, y * T, rw, 3), edge)
+				g.rect(Rect2(rx, y * T + 3, rw, 3), tile.lightened(0.15))
 			else:
 				x += 1
 	for y in h:
 		for x in w:
 			if cell(x, y) == SOLID and cell(x, y + 1) != SOLID and y + 1 < h:
-				draw_rect(Rect2(x * T, (y + 1) * T - 3, T, 3), tile.darkened(0.45))
+				g.rect(Rect2(x * T, (y + 1) * T - 3, T, 3), tile.darkened(0.45))
 	# One-way platforms: slim slabs with struts.
 	var ow: Color = theme.oneway
 	for r in _merged_rects(ONEWAY):
 		var rx := r.position.x * T
 		var ry := r.position.y * T
 		var rw := r.size.x * T
-		_gradient_rect(Rect2(rx, ry - 8, rw, 8), glow_b, Color(edge, 0.18))
-		draw_rect(Rect2(rx, ry, rw, 10), ow)
-		draw_rect(Rect2(rx, ry, rw, 2), edge.lerp(Color.WHITE, 0.2))
-		draw_rect(Rect2(rx, ry + 8, rw, 2), ow.darkened(0.4))
+		g.grad(Rect2(rx, ry - 8, rw, 8), glow_b, Color(edge, 0.18))
+		g.rect(Rect2(rx, ry, rw, 10), ow)
+		g.rect(Rect2(rx, ry, rw, 2), edge.lerp(Color.WHITE, 0.2))
+		g.rect(Rect2(rx, ry + 8, rw, 2), ow.darkened(0.4))
 		for i in range(1, r.size.x * 2, 2):
 			var sx := rx + i * T * 0.5
-			draw_line(Vector2(sx - 6, ry + 10), Vector2(sx, ry + 18), ow.darkened(0.3), 2.0)
-			draw_line(Vector2(sx + 6, ry + 10), Vector2(sx, ry + 18), ow.darkened(0.3), 2.0)
+			g.line(Vector2(sx - 6, ry + 10), Vector2(sx, ry + 18), ow.darkened(0.3), 2.0)
+			g.line(Vector2(sx + 6, ry + 10), Vector2(sx, ry + 18), ow.darkened(0.3), 2.0)
 	# Ladders: two rails and rungs.
 	var rail: Color = theme.oneway.lightened(0.15)
 	for c: Vector2i in ladders:
 		var x := c.x * T
 		var y := c.y * T
-		draw_rect(Rect2(x + 6, y, 3, T), rail)
-		draw_rect(Rect2(x + T - 9, y, 3, T), rail)
+		g.rect(Rect2(x + 6, y, 3, T), rail)
+		g.rect(Rect2(x + T - 9, y, 3, T), rail)
 		for k in 3:
-			draw_rect(Rect2(x + 6, y + 5 + k * 11, T - 12, 3), rail.darkened(0.15))
+			g.rect(Rect2(x + 6, y + 5 + k * 11, T - 12, 3), rail.darkened(0.15))
 	# Heat haze above hazards.
 	var hz: Color = theme.hazard
 	for r in _merged_rects(HAZARD):
-		_gradient_rect(Rect2(r.position.x * T, r.position.y * T - 70, r.size.x * T, 64),
+		g.grad(Rect2(r.position.x * T, r.position.y * T - 70, r.size.x * T, 64),
 				Color(hz, 0.0), Color(hz, 0.22))
-
-
-## Vertical gradient (top colour -> bottom colour) via per-vertex colours.
-func _gradient_rect(r: Rect2, top: Color, bottom: Color) -> void:
-	draw_polygon(
-		PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]),
-		PackedColorArray([top, top, bottom, bottom]))

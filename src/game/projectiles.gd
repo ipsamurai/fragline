@@ -25,6 +25,10 @@ var list: Array[Proj] = []
 var _next_id := 1
 var _glow: Node2D
 var _trail_t := 0.0
+var _trail_n := 0                # trail ticks (low quality skips every other puff)
+var _drew := false               # last redraw had projectiles in it
+const MAX_ROCKET_LOOPS := 4      # sfx: concurrent rocket engine loops
+var _rocket_loops := 0           # sfx
 
 
 func _ready() -> void:
@@ -34,6 +38,8 @@ func _ready() -> void:
 	_glow.material = add
 	_glow.draw.connect(_draw_glow)
 	add_child(_glow)
+	DrawUtil.setup(self)
+	DrawUtil.setup(_glow)
 
 
 func spawn(key: String, pos: Vector2, vel: Vector2, owner_eid: int, wid: int) -> Proj:
@@ -51,6 +57,10 @@ func spawn(key: String, pos: Vector2, vel: Vector2, owner_eid: int, wid: int) ->
 	p.bounces = p.def.get("bounces", 0)
 	if p.def.has("loop_sound"):
 		p.sound = Sfx.loop_at(p.def.loop_sound, self, pos, -2.0)
+	elif key == "rocket" and _rocket_loops < MAX_ROCKET_LOOPS:   # sfx: rocket engine (capped for perf)
+		p.sound = Sfx.loop_at("rocket_loop", self, pos, -9.0)     # sfx
+		if p.sound:                                               # sfx
+			_rocket_loops += 1                                    # sfx
 	list.append(p)
 	return p
 
@@ -93,6 +103,8 @@ func remove(p: Proj) -> void:
 ## Release anything a projectile owns (its looping sound) when it leaves the list.
 func _drop(p: Proj) -> void:
 	if p.sound:
+		if p.key == "rocket":           # sfx
+			_rocket_loops -= 1          # sfx
 		p.sound.queue_free()
 		p.sound = null
 
@@ -229,16 +241,50 @@ func _trails(delta: float) -> void:
 	if _trail_t > 0.0:
 		return
 	_trail_t = 0.03
+	_trail_n += 1
 	var fx: Fx = world.fx
+	var lo := Settings.quality <= 0 and _trail_n % 2 == 1     # low quality: half the puffs
 	for p in list:
-		if p.def.get("trail", false):
-			var back := p.pos - p.vel.normalized() * 10.0
-			fx.emit(back, -p.vel * 0.05 + Vector2(randf_range(-20, 20), randf_range(-20, 20)), 0.6,
-					3.0, 12.0, Color(0.6, 0.6, 0.65, 0.4), -30.0, 1.5)
-			fx.emit(back, -p.vel * 0.1, 0.12, 6.0, 1.0, Color(1.0, 0.6, 0.2, 0.8), 0.0, 0.0, true)
+		match p.key:
+			"rocket", "redeemer":
+				var big := p.key == "redeemer"
+				var dir := p.vel.normalized()
+				var back := p.pos - dir * (18.0 if big else 10.0)
+				# Flame tongue + lingering smoke that billows out and drifts up.
+				fx.emit(back, -p.vel * 0.15, 0.1, 9.0 if big else 6.0, 1.0, Color(1.0, 0.7, 0.3, 0.85), 0.0, 0.0, true)
+				if lo:
+					continue
+				for k in 2:                                   # two puffs per tick: a continuous plume
+					fx.emit(back - p.vel * (0.015 * k) + Vector2(randf_range(-3, 3), randf_range(-3, 3)),
+							-p.vel * 0.04 + Vector2(randf_range(-15, 15), randf_range(-25, -5)),
+							randf_range(0.7, 1.0) * (1.6 if big else 1.0), 7.0, randf_range(13.0, 17.0) * (1.8 if big else 1.0),
+							Color(0.55, 0.55, 0.6, 0.24), -25.0, 1.8)
+				if randf() < 0.35:
+					fx.emit(back, -dir.rotated(randf_range(-0.6, 0.6)) * randf_range(80, 200), 0.25, 1.8, 0.3,
+							Color(1.0, 0.6, 0.2), 300.0, 1.0, true, 0.02)
+			"grenade", "sticky":
+				if not p.stuck and p.vel.length_squared() > 400.0 and not lo:
+					fx.emit(p.pos, Vector2.ZERO, 0.22, 3.5, 0.5, Color(p.def.color, 0.35), 0.0, 0.0, true)
+			"shock_ball":
+				fx.arc(p.pos, p.pos + Vector2.from_angle(randf() * TAU) * randf_range(14.0, 24.0), p.def.color, 0.05)
+				if not lo and randf() < 0.5:
+					fx.emit(p.pos, Vector2.from_angle(randf() * TAU) * 60.0 - p.vel * 0.1, 0.3, 3.0, 0.5,
+							Color(p.def.color, 0.6), 0.0, 1.0, true)
+			"flak_shell":
+				fx.emit(p.pos + Vector2(randf_range(-3, 3), randf_range(-3, 3)), -p.vel * 0.1 + Vector2(randf_range(-30, 30), -20),
+						0.35, 2.5, 0.3, Color(1.0, 0.55, 0.15), 400.0, 1.0, true, 0.02)
+				if not lo:
+					fx.emit(p.pos, Vector2(randf_range(-10, 10), -15), 0.4, 2.0, 7.0, Color(0.45, 0.45, 0.5, 0.25), -20.0, 2.0)
+			"pulse":
+				if not lo:
+					fx.emit(p.pos, -p.vel * 0.05, 0.12, 4.0, 0.5, Color(p.def.color, 0.4), 0.0, 0.0, true)
 
 
 func _process(_delta: float) -> void:
+	# Nothing in flight now or last frame: the (empty) canvas is already up to date.
+	if list.is_empty() and not _drew:
+		return
+	_drew = not list.is_empty()
 	queue_redraw()
 	_glow.queue_redraw()
 
@@ -256,27 +302,27 @@ func _draw() -> void:
 			"rocket", "redeemer":
 				var s: float = p.def.size
 				draw_set_transform(at, dir.angle())
-				draw_rect(Rect2(-s * 1.6, -s * 0.55, s * 2.6, s * 1.1), Color(0.85, 0.87, 0.9))
-				draw_colored_polygon(PackedVector2Array([Vector2(s, -s * 0.55), Vector2(s * 1.8, 0), Vector2(s, s * 0.55)]), c)
-				draw_rect(Rect2(-s * 1.6, -s * 0.8, s * 0.6, s * 1.6), c.darkened(0.3))
+				DrawUtil.rect(self, Rect2(-s * 1.6, -s * 0.55, s * 2.6, s * 1.1), Color(0.85, 0.87, 0.9))
+				DrawUtil.quad(self, Vector2(s, -s * 0.55), Vector2(s * 1.8, 0), Vector2(s, s * 0.55), Vector2(s, s * 0.55), c)
+				DrawUtil.rect(self, Rect2(-s * 1.6, -s * 0.8, s * 0.6, s * 1.6), c.darkened(0.3))
 				draw_set_transform(Vector2.ZERO)
 			"grenade", "sticky":
 				if p.key == "sticky":
 					for k in 6:
 						var spike := Vector2.from_angle(k * TAU / 6.0 + p.age * 3.0) * 8.5
-						draw_line(at, at + spike, CharPainter.OUTLINE, 2.5)
-				draw_circle(at, 6.5, CharPainter.OUTLINE)
-				draw_circle(at, 5.0, c.darkened(0.2))
+						DrawUtil.line(self, at, at + spike, CharPainter.OUTLINE, 2.5)
+				DrawUtil.circle(self, at, 6.5, CharPainter.OUTLINE)
+				DrawUtil.circle(self, at, 5.0, c.darkened(0.2))
 				var blink := 20.0 if p.stuck else 8.0
 				if int(p.age * blink) % 2 == 0:
-					draw_circle(at, 2.0, Color(1, 0.3, 0.2))
+					DrawUtil.circle(self, at, 2.0, Color(1, 0.3, 0.2))
 			"flak_shell":
-				draw_circle(at, 7.0, CharPainter.OUTLINE)
-				draw_circle(at, 5.5, c)
+				DrawUtil.circle(self, at, 7.0, CharPainter.OUTLINE)
+				DrawUtil.circle(self, at, 5.5, c)
 			"flak":
-				draw_line(at - dir * 7.0, at, c.lightened(0.4), 3.0)
+				DrawUtil.line(self, at - dir * 7.0, at, c.lightened(0.4), 3.0)
 			_:
-				draw_circle(at, p.def.size * 0.5, c.lightened(0.6))
+				DrawUtil.circle(self, at, p.def.size * 0.5, c.lightened(0.6))
 
 
 func _draw_glow() -> void:
@@ -286,16 +332,18 @@ func _draw_glow() -> void:
 		var s: float = p.def.size
 		match p.key:
 			"shock_ball":
-				_glow.draw_circle(at, s * 2.2, Color(c, 0.25))
-				_glow.draw_circle(at, s * 1.2, Color(c, 0.6))
-				_glow.draw_circle(at, s * 0.6, Color(1, 1, 1, 0.8))
+				DrawUtil.circle(_glow, at, s * 2.2, Color(c, 0.25))
+				DrawUtil.circle(_glow, at, s * 1.2, Color(c, 0.6))
+				DrawUtil.circle(_glow, at, s * 0.6, Color(1, 1, 1, 0.8))
 			"pulse":
 				var d := p.vel.normalized()
-				_glow.draw_line(at - d * 14.0, at, Color(c, 0.5), s * 1.6, true)
-				_glow.draw_circle(at, s * 1.4, Color(c, 0.35))
+				DrawUtil.line(_glow, at - d * 14.0, at, Color(c, 0.5), s * 1.6)
+				DrawUtil.circle(_glow, at, s * 1.4, Color(c, 0.35))
 			"rocket", "redeemer":
-				_glow.draw_circle(at - p.vel.normalized() * s * 2.0, s * 1.6, Color(1.0, 0.55, 0.15, 0.55))
+				var flick := 0.8 + 0.4 * randf()            # exhaust flicker
+				DrawUtil.glow(_glow, at - p.vel.normalized() * s * 2.2, s * 4.0 * flick, Color(1.0, 0.5, 0.15, 0.6))
+				DrawUtil.circle(_glow, at - p.vel.normalized() * s * 2.0, s * 1.6 * flick, Color(1.0, 0.65, 0.25, 0.6))
 			"flak":
-				_glow.draw_circle(at, 5.0, Color(c, 0.4))
+				DrawUtil.circle(_glow, at, 5.0, Color(c, 0.4))
 			_:
-				_glow.draw_circle(at, s * 1.5, Color(c, 0.3))
+				DrawUtil.circle(_glow, at, s * 1.5, Color(c, 0.3))
