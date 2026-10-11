@@ -98,11 +98,28 @@ func host(match_config: Dictionary) -> String:
 
 ## Returns "" on success or when cancelled (whoever called close() already moved the UI on),
 ## else an error message.
+const CODE_ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # matches tools/serve.py
+const CODE_LEN := 6
+
+
+## True for a well-formed room code (6 characters from the server's alphabet).
+static func valid_code(c: String) -> bool:
+	if c.length() != CODE_LEN:
+		return false
+	for ch in c:
+		if not CODE_ALPHABET.contains(ch):
+			return false
+	return true
+
+
 func join(room_code: String) -> String:
 	close()
+	room_code = room_code.strip_edges().to_upper()
+	if not valid_code(room_code):
+		return "That room code doesn't look right (6 letters and digits)."
 	var session := _session
 	_base = _signal_base()
-	var r := await _post("join", {"code": room_code.strip_edges().to_upper()})
+	var r := await _post("join", {"code": room_code})
 	if session != _session:
 		if not r.has("error"):
 			_post("leave", {"code": room_code.strip_edges().to_upper(), "token": r.get("token", "")})

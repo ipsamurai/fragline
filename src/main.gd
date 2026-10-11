@@ -30,7 +30,7 @@ func _handle_url() -> void:
 		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get(%s) || ''" % JSON.stringify(key), true))
 	Net.debug = q.call("debug") != ""
 	if q.call("quality") != "":
-		Settings.quality = clampi(int(q.call("quality")), 0, 2)
+		Settings.quality = clampi(int(q.call("quality")), 0, 1)
 	var code: String = q.call("join")
 	if q.call("bench") != "":
 		_start_bench(float(q.call("bench")), int(q.call("map")), int(q.call("bots")) if q.call("bots") != "" else 7)
