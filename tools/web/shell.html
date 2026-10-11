@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>$GODOT_PROJECT_NAME · neon 2D arena shooter</title>
+<meta name="description" content="FRAGLINE: fast, neon 2D arena combat in your browser. Smart bots, LAN multiplayer with a room code, 9 weapons and 7 arenas. A tribute to Unreal Flash.">
+<meta name="theme-color" content="#080a12">
+<meta name="color-scheme" content="dark">
+<meta name="application-name" content="FRAGLINE">
+<meta name="apple-mobile-web-app-title" content="FRAGLINE">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="FRAGLINE">
+<meta property="og:title" content="FRAGLINE · neon 2D arena shooter">
+<meta property="og:description" content="Fast, neon 2D arena combat that runs in your browser. Bots, LAN multiplayer, 9 weapons, 7 arenas.">
+<meta property="og:image" content="og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="FRAGLINE: neon arena with bots mid-fight">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="FRAGLINE · neon 2D arena shooter">
+<meta name="twitter:description" content="Fast, neon 2D arena combat that runs in your browser. Bots, LAN multiplayer, 9 weapons, 7 arenas.">
+<meta name="twitter:image" content="og-image.png">
+<link id="fl-favicon" rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADs0lEQVR42sWXzWtcVRjGf+97zp0kd5JJJpYklEpKF25aYkq7kbpSUFJqxS+EIggtrV9gV0UXIrgS/AcsakVBiwux6sLoQgtakRq1trYVXDVaalAwaWYmSWfuOa+LmSZSkto7MfVd3nvOPc/zOx/3OQIIYADd5eEnzWQvMAok/LfVAH4UsTer05OHW89EACmVNpSD+ndEdMwwMGNNSgRBMIvjLmaPzc5enFZAgrqjon7MLGaYRdaqzKJZzET9WFB3FBDXXR5+QsQdNAuNFnbJ46gJ8cZ7AIrFhoi7rdBVmnJJR98biAy2XuYbPAQsBsS53JOBANFuVUQ2Y9ZUdqO9VYm1KunIVvp3P0KYvZxXhGImiGxWwOeeS1WsUWfd4wdYf+gFNE2xENpZFV5zs1MlVKukt2+j9+67KGzsp/+BR5sUfBte2nJfv8LAvmfwvZ3EmjGw72lcqRfLsrUVsOh+ZCvl3bsI1UhciKQjmyjf/3BbFLRd965UwDJDVLC6MbD3qbYoaNvuZyPiFVQJ1fYp6GrcLx4bq6Cgq3Jvzf+GrIKCrsq9E8QLGG2vBW3HPQKaGvNnTjP98Ye4XsCMUMtPQdtzD75DmHr7NSZfeQnmsiYJyE1B23Hvi45L3/9COP45PRcvceH9D5AeRYzcFDSve4dQSeChY1/ww9A9/LxtHy9+eoqFy3VItBmvclDQPO6dCrWicOfJC7w8McWGW4Yop93s/8Nz4KOTVLsEh+TaEZrr1DO4kgh3TJwnzC/QIBBCoKGRHd+exTUME8m1I3RF95UK6ZYR+nbtJMxkgCEFiL/+yYljb+FKfUgwQsxISv18N3Gcv776Et8DFgKhktG1ZRPl+x4kzEyvSGFZASYCMTB08HkK6zuRTo+mHlmnZO+9y5FT4xyZOY/XhILv4pvKbzw3eYLa668SneB6ErQ7QRMYevYQfnCQWK8vG9+k2LfRlgmPiPeko9sRp63QDjiYP3OaRqVCXWFHcYiiJnxd/Z15y+gUT+fodrTDQyvailfmzv5EdpXCNYl7eQGtirUqZkvCzUDTFHUOMaMSMzAjdQkOIWLEuRoW7R99DO1Klx38XwWgiogsERCwGBc/pAgiEM2WmqhbuupcFXGduOaBbMVcGCPXu6JEjGsbWMyVDTPF7BwixuKs3ZSKiBhm51SUw02QhJsoIAgizbFBi33Dn4gm91rMstbW1DVzDlHUe4uNz2ozkzsVMBfDHovZuIh6RHTNfIuoiHqL2biLYQ9g8n9fz/8GAGsLKvYuNOsAAAAASUVORK5CYII=">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<script>
+// Engine config, defined early so the big downloads can start before index.js has even arrived.
+const GODOT_CONFIG = $GODOT_CONFIG;
+const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+(function () {
+	// Preload .wasm/.pck with the same request mode the engine's fetch() uses, so the browser reuses
+	// the in-flight response instead of downloading twice. Names come from the export config.
+	try {
+		var sizes = GODOT_CONFIG.fileSizes || {};
+		Object.keys(sizes).forEach(function (f) {
+			if (!/\.(wasm|pck)$/.test(f)) return;
+			var l = document.createElement('link');
+			l.rel = 'preload';
+			l.as = 'fetch';
+			l.href = f;
+			l.crossOrigin = 'anonymous';
+			if (/\.wasm$/.test(f)) l.type = 'application/wasm';
+			document.head.appendChild(l);
+		});
+	} catch (e) { /* preloading is only an optimisation */ }
+
+	// Plain HTTP on a LAN IP (http://192.168.x.x:8000, the LAN-play setup) is not a "secure context",
+	// so Chrome hides AudioWorklet. Godot 4.7's audio init calls audioWorklet.addModule() for its
+	// playback-position helper unconditionally and the engine hangs on start-up without it. Shim just
+	// enough: init gets a no-op addModule, later checks see no worklet (Godot then mixes with its
+	// ScriptProcessor driver), and position-reporting nodes become silent pass-through gain nodes.
+	try {
+		var AC = window.AudioContext;
+		if (!window.isSecureContext && AC && !('audioWorklet' in AC.prototype)) {
+			var probed = new WeakSet();
+			Object.defineProperty(AC.prototype, 'audioWorklet', {
+				configurable: true,
+				get: function () {
+					if (probed.has(this)) return undefined;
+					probed.add(this);
+					return { addModule: function () { return Promise.resolve(); } };
+				},
+			});
+			window.AudioWorkletNode = function (ctx) {
+				var node = ctx.createGain();
+				var param = { setValueAtTime: function () { return param; } };
+				node.port = { onmessage: null, postMessage: function () {} };
+				node.parameters = { get: function () { return param; } };
+				return node;
+			};
+			console.warn('[FRAGLINE] Insecure context: AudioWorklet unavailable, using the ScriptProcessor audio fallback.');
+		}
+	} catch (e) { /* audio fallback is best-effort */ }
+}());
+</script>
+<style>
+/*FONTS-BEGIN*/
+@font-face{font-family:'Fragline Title';font-weight:700;font-style:normal;font-display:block;src:url(data:font/woff;base64,d09GRgABAAAAABpAAA4AAAAALKwAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAABHREVGAAATwAAAACgAAAAoANkA4UdQT1MAABPoAAAF/wAAEOi6uKLGR1NVQgAAGegAAABYAAAAZJpwgnhPUy8yAAASrAAAAFMAAABgXnp6nmNtYXAAABMAAAAAmQAAAMYqMUnvZ2FzcAAAE7gAAAAIAAAACAAAABBnbHlmAAABRAAADuwAABYKVBHJLGhlYWQAABEgAAAANgAAADYQWdZraGhlYQAAEowAAAAgAAAAJAXqAuxobXR4AAARWAAAATEAAAGc3N8QN2xvY2EAABBQAAAA0AAAANAdHiMMbWF4cAAAEDAAAAAdAAAAIAB3AIVuYW1lAAATnAAAAAYAAAAGAAYAAHBvc3QAABOkAAAAFAAAACD/uAAyeJxlWAtYVNe1XmuPOIoaM+JhgiJwZgcGBUE5PY6QaQTlEXwFq5iKRBSR4XHkMYwtIYbgeOSOj3qNr2I0Pmtavd+l1Bof+aY26YeWGG9i2tw0jWluzE1z0zQxSqOGJrPnfnufM2DsN9+Z197rvda/1t5AoAwA/0H6wAJWgBjZJifbZFsZ7mMeXMX+RPpCM2eQ5aHjQCAKgGwgQbDCKABUkDqplaKFWjBqPcKW7DvZW3D/k6SMBEP5+/fjKIxmdwAskAdAniZBGAEPwHguwy5Z7ZJVRpfqpBJ/l6U8PFuVWqSxLGx+mH6Bw9LS2LckWNU7+bGzGv70YY3+ml1Lq0w7B4DgAiDNJAgxAC6bS7ZLVHVSq82uuFRFssquFlzaHMjsU5S+zEAzO9mC77Q012dnKmynkpld3wxEaPQUCUIUtyRGttuscrLL5qS2PHyltZXl4jOKcpsEW9n3Wn0KNigsncvlVI+QoEEjDb7y8J9sO5ay/0AvG06CLb9qPt1i7p5OgjByaLeN5uFN1oUzWV+ABFt+18I+j9jzYxIE6V/toapsExaVNwcy31CUq9P34oQW9uK9Nk1f62NfRCQ+Zeqn2GSbYqM2LjOAqYEAezdAguwaJofykbK/cLmFAPAGCYJF7KeFgQCPHF8ZD0BGGJy4T+2Ky6bYrPJ4Xdk0LbCODTzlX6JkkrjQ+XURv3SSIIwWfJQYxRJDLZQLrjux778+OHCu1hTNjrEjQrhB4xQRELpKcl4AV7AJJBg62xLh+SEJwli+zl82aqMWg237VfJW+0ZyZMlhspEEmRt7Q/l4kp3Dx9jSCG1rxA+ocD8gp2vDmWRjG+sTVMl4LZSP77EUACIisElk9lgzBpGMsNrsrhasaWlhXZikKO8qCnd9C5vSIhKD+9/Mp9WCfoyZ37JEjfTOw7P1GvtDAJ+i9BYJarfX3sCV9Gf0MyE37CPPkyBEwziAKKtTdhqynaZo8vySn7BbLVyBuc1C+swl20wF5s4bVMDUwCNiMA4gWWQQj75dsiYrXA/iCbjfC+DZ+nx28haltz799LU57CsS1N4uKKABCghZAKSEBGHiYMxVp+xUB/NRsgu7sjrlNx0yu6tp6NY65UuyjCO1BhbUqh6RHT5ZO69pa9yy7JG1iw2A3J8kW3gGYqgqS9RGP3yLTHkrQIpbWkJnzWg9beaaTbFFci0voPQqgVZ2ppXkh/6uKEQKBVt5dKMBSIfJUWSGhUZv6ybd2wZ0Egx9QiaE8gEhDsCy9N78MXbyV9zm0mFbqwPDSjc/9+zWYdufJUE2Dm/wJ5SPn7PxgALp/s3MIItid/GMdlrpwGf7Dh7c99lX+37xi31Yi4s/+YSdYPvv3gUEACBtZrVbDGE2OjCw5+fk53sGApiAB9l1TGSV7CNuAwUgU02bUZVVWUKODxQ97BgBtg89oTsavk+8GnuYeHl8p/KKxH4Yxy1zqS5FhITy8NioaqUul8pDNLU8lLg3wV+PWP/juRdeeiw4Ma7cWz4rMTE+W9NYW1FRdYE8MSuOc3QDkBRyGUaCzfC8S+FZ7+LZYpXsbr34jMfDPv3vlJTKshSNrGD/W1DDPqhpcvY6y55zgpkxD2L/fTgsRXA4aw2O8+h0B6U7qO5hN6oxpbqmfDqlVyidXl7DdeAcEshlGGXyUOy8WA1zBKssz6VH9PULgj2L8ttSUmrQUaPgqNCMBQuaFvu/7+x1mjwmYD+MHcJPeVAHFGyyPBhXww4kHUvwr2bXIew44KjGh2tqfpMrJ07Iq8LJOZTmcIvGAmAneVlkDVUV1aVI1CopPGtry8rWnHs2fv8+HTc2rl6zNn5WI3tG2BCmJEF4YSIA2qyy06weK3Vyi1Sr6RSSoLFbT+ox+x0FQY+ntyiam7R2EfaHDtSX5yeMpz/J4wbm5/8nt2wx14fHaCK5LFDFCBAVwEDd+oJDjbpjaYVOLrNrCxrZM1hBV7IPDCyDP5M+o0vHqC7FLlmpVbFRV0ZhRkZhoq6TstyMjNyMHPYAAAn/NpwCn4r9Y4f2W4wqpIWC5qUWqtf/0iQL1VGSHTpUH9Evi1yOIL9LscZQJ5WoW3/i2Z0v9uzctoTr13z2JmOvv27UOlwklyMdJ0/XyeXQDJOTJQX7IZavSC5ec4PGmia3LWrPz++u1x1L1I4k93Id+3/wg4ICjbVhBVXZr3GVXM7ei2gVh/2G1zivIRaLjzTqjiUVOvYvXjzktEgmYv93O8BQFmKCx8M++oDSg5TyIPFKaKBXKb3KSxnc4XSSiv1GHpsyefiNHsCrqa34dx7Pq7k6FlDaXPI49hcXcx4qu4v59Apd1FZk5FI6icd+oyaTRQLx+raYXLCr6JzHgw/V68uWOQ46HEVFXBct9CLmV+zgdWVaj7sFD0MTybC8ZHvLKmF2U9UgBuFt7P8O3tPv4D3PBJn6Y4/G2v+0ogKHrfLH7hZf2Y3K78fb7WkPVaxdKb45H6poXmnWzyay2/AhLyCFF49kVyRaW1bu7+py/OilapzUePRo0y25KTL7xBixGkJ/gQC6o6RSb1t6rBY3s8OOSkxiD5SWGkiLTEQKbCaqb/YN823+bQf2s+O4nGe1McFcFKjwL/g/vjN7WFnr4mGzOjc8XT6s8mnsZ5cwRzwPYAnrMfF/lIgnyE4rdTl5Plrt+KOGhj0vv7SntnbP6fNdXaHbO3fe/UZYEaZEwn6OQPcjgGETkTT2zyf1mJ2OucfrdccTTw5V/d65GnayI3Q1Jhp9C/9sSL63M8ShxG7jGfZ3lFhuNSaS+mp2nYga5B02g5zjGSPznk9tQ8glkwz9N3pZ2ZrghnjMQz9rR3/TqjUN8e4I5ePkUoTSBDqDXCaPd74Sv2sXJ8YNpCx+fpMgblwTmZdK75+XXJF5yYczfD52+U56+pn0dB++7fOxdJ8vHdenpzNdTNLcypkkCMMBYqyqS7HRnp+eWhsgaQufqTQmUF5WE0lQ9CYc6nWGN5xYIx+VAxrGa+wF9LDR+7CoSJaLmjSti/VGe036ySQI8fdmtyreI6zEGYQG5NNyUl9fktzNGaZqiqKxP2gNBbLcnORLWivLBQ2adiFLeVUDImYPPs1Ec7uTZZUPlxKVqMtGLRKWs250HSstDQwf9qZ/M/6K5fj8/ZjF3hcZOdU8D8TcO1/xyVcSc9XUgHxKltkv8XP2PFrXauxtzVssywdlrPF1rP1SM72eJ3wS992OKzB7EK1cGmZoAdpDH7mmaeyNf1C6vZhq+LGmVWVTejxbu6756FY6bzWf+qIA8JYxTZnpRnE1O4qfs//bQWaN9HWEesEi0HE+CcIYkGCSmD+cQy6MMeVGPrNmqVwDdZbGLgxQ2kPpy5T2UqpdmKWe0rRT6qwLGh6g1ZRWU/YubaK0iZoI7B60bqiCxIgzJMUdoCdp9l80DbM0jb37eh49Tam2LIPSI9naXzWNxWvYktdM6b8LNEwFgEuwl9vnMntbalrxlCnFablp6Y+mA0JKuE3sGAmgcGlijyc2LW3elOyFfFddJxDB5xW8cl+XjHCcXJSaWjRZvOOaRydPcU9hX4gPThlugz5BaRuijBmUNEVQxZryItS9puBwmEsmR2EvOGA2AFCYDTeAn6pn4/t86OR4D++IkxTvd6oiWajV5F0QeLAmLi0/LS2fzOjsZLsPudPS3GlAuIdJtJiO7QCmZ6lBJA1SXz2tbMzsbBtoP6OPEkwwp3uqkpld2dbe3rNot+Al9LsCl7ASrEK/K9zneB5Vo3ZjrE6X02V3KlaX3Wq3Ou10x5zkJ55InjO6dHTkCxmpFiY5CmeUlMwodCQVqiXcKm71cXEaSQRAK0cz6hKPqohHsYpHotSqkKmxbdsT9ITGBD2hqjW2bfskfVLjJH1S1beNsY14uMPb3d3d7e3wnjx58qS3w5zWuf0W4x4D/QHWbhx+jbU4Y82mIN2MOyIreeGtuMAyzTipGI2Vd7a8jm3z3e7520aR4x1ed+ism+PP2PBWnGjstasKR0aVzwRjxc6OjnVeNyl2eztCyzt4liaEt2KdZRrHBrvqVF0mfFslu+id2sKFdbt/6Cgudvxw96iBktySr+u8ji/njZh30xGRtTxCrbhUl+oUYGeXeDytY03KuoUL69Z5HTfnjZj3pcNb93VJbslAnTgvh7disWWacf8jUZvC7zRG6Dr72jLNG5rlFb0ivBXtxh67yju0bBur6zhinZe86v12uai0PgxgjpjtZElOxZXsMOZw/VKhj5Tes0Kmhv44tPL7e1cOhVYZKxDuxI/Cd/gKR0j8iCVEN4XD4MZzuIMEwQHLRBUsgyt8IOD/Q695n8Anf+oOPFhD5nq9O/murPBOUmKZAomQDGkAKFmpRFVq9Gn+6RKjioGnkkLFWcrOv7pISUO1V9M65el1mlbnXal1ysk172XK8pfy1HQHKhcbGhr42fesdl5raOBn3xMnZI+8Rz7rMPBnOhmN/8PzIFnINIYiMrpH7+nRe64eOtR06JDI91YyGrsit3DGfVEqfszixdPVlNtkoBl5jLgFmiWryWqUFJWK7cxPkkIf+l8Yvsd/3fs3uG+fmixFSVFSKklifmz/m/e6f8/wF/zGrp8RB643TjsmABjnJvpH20P+2ir/mHh/bRVGxT1aVbdqUk6VyJZU+IrUmh1D4Rc9Fooj13+8Zc/wnVtIkM1Elb0OEMV1sMwxbwv52YgOoR+vuQieo/lfpHullnSXlHTj+QDbEMiJjc2JjcU54i+f8ePA1ZKSqyXYFMrHntj1sbHrY9lh8VeV8UtouJzswlc5oidHqclOQ+ZNNhP7VqzftGn9m9iOvgMZBwTOhK9YJpINkAApAMlGv1F4hpujgp2PG6LVWqnTPMjhN4XrKla2Za3IzNx8a9dz+AJL6buMa3ob/Ytp7qSEGeld4+dUnFqZlcFuT9+7edfF56r7kF7u/WvjZ3SSlpBu9rptJAhxkHRPN42M3ebUzG+gRCJmPSrX4+haPfH5RPmdjtm59SyI0fItWa6/MMtxSaubm5SU5HPMnu09rfkcW+Q6WdT09+D3loWDJ63OTsvCbz7h8RtDkuBj8pqxYqdjts73kddOwP8D9DN9VXicY2BkYGBIZ3BmYGewZ2BlAPEQgJmBCQAX7gD9AAAAAAAAFQAVADEAWQB6AJUArADBAOUA/QEKASEBOwFLAWkBggGiAb4B4wIEAi8CQAJYAmsCigKjAroC0wL8Ax0DPgNgA4YDoAPOA+gEAAQeBDYEQwRpBIMEogTGBOgE/AUmBT8FWAVrBYoFogXHBeAF/QYaBjoGSwZrBpYGtAbVBv8HEgdEB28HgAeTB7AH0AfgB/oIIAgpCEsIegiICJUIqwjCCOEJAQkTCSQJMQk+CUsJVwljCXIJrwnDCdYJ6gn9ChgKLAppCn8KugrrCvgLBQABAAAAAQAA4d5Abl8PPPUABwPoAAAAANd+YNUAAAAA17gyCf1O/coEuQTfAAEABwACAAAAAAAAeJwtkL0rxWEcxT/f8+tKt/S76Q5+C+mWnoXypJ7lCU+ElLwtN2+jgWIwUYwGbmFRFgt/gNVL2cUfYDWZkD8A3Zvh0zl1Tmc4mmHJKqBDSrok6YSgG5LWSBol6ZqgO5JVmdA4VR2TNEjKekm6JemBoMN/vSJpH68pcj2QdEQ526ZQg5L2QHPUNEK/6kQN4LWE1yTeTslbfoFoFYL1/D4qEK2NlK0SNdei2Y9axNsFUV3U7JJcswT7Ab1SVYWS5gn2TaENcjV3GwQ7oNAwNS1T0xhlrdGvLYLKlHSA1w6eDxwf9PGOa6InnHUS5Smama3i9IJTGVSArZBshdx26bZdcquTrE5uNzjt4/SJszewZ6JBbP0yhGux/s80Tme4bBOne1w2htM53tpJfNHxB5YDQMQAAAB4nGNgZGBgfvDvDAMDy8O/fv+us+xkYGRABekAu7wH2XicY2BhsmHaw8DKwMDUxRTBwMDgDaEZ4xiMGLUYGBgYOEAEBDAjmAwMzi7eCgwLGBQUJzE/+HeGgYHlAZMZAwMDI0iO8RPTHgYGBgUGZgD1BgvnAHicRck7TgJRAEDRM4wFpQlTUD4bWilopDAKiEYE5JOo/ISgLEISF8FSbCio3IErMOzkmVDIbU5xkUOKTCo5eOILRadSeecuXBmZ+/BpG7JQOtvEiKCs6trYwto2FP5PnvhN3BE3+9o+/P5IFFHBJZqOJW49axlZePOio+veWN1QzYOGGzMTU3eW+toG5p6sPHrX8/oHNEchdwAAAAAAAAAABgAAeJxjYGYAg/9bGYwgLFQAACzCAeoAAQAB//8ADwABAAAADAAAAAAAAAACAAQAAgAkAAEAJgA1AAEANgA3AAIAWgBaAAF4nK2XP2xbxx3HP49/JYqSJUuyREV2/jlBkABFXSGOE7t2IhpCBiN1U8dwPCVACjRI4aHI1Kno1KFThmjh4kULOwhFuGjRwoWLFgIFFwIFFwIFEeAtb+HwDe53x0eRkmw56T3cvXt3v7v7/fn+fr97RECJt/mA7N2dew9Y+fOX3z5h5ds/ffk1K+QAJBxV9M0f//KEGSDjvshQiBbIMEOWMv/mP0RcsRUlfsV9bnCf+2xb+5i/kSHDDW4AN6na+m0NqCq2XkJVCVluqc226lRVt/HYxme5oQHvq8FNxdxSwm8Vc1sxd9TjQ8V8pNioYt7XATeVBKqE20q4oz4fKuEjJWSCXHfZMC5Qm4iIO2SIeMBDG71kNK9wlYgsqGsyZ3nAZzwMGrhFznpeGzPkWIi+m3ky/y8ifm3rl3nMFzzhn3zPDxzwX5JoJlqIrkbXo4+jh9FX0V/dQ8QyGbIUmWeJVdao8CrvcI0t3mWbKjt8wn0+JWJVe2RZ05CKhmxpSJGKEq4pYUt9tvWUqp6yoxr31CXDIzX5XE2KrCmmoi5bStjWLlXtBroWEVXVmOWqelxThy0dcV0d3lNnas82eS7biW1+R4nfU+IPlMgZH956++yoScS6muRZU4eKWfaQqpo2l2NNR1PrV3VotOvqsqGmyfmUy4q5psP0y53sdl1VjTXV2FDNRn6jJhkqlNiiRCbfcTbI/1h4kxXeAMWKVdNAbe0pUV+xDtRWop7qGqqrDi9QNHRVA98DJfad+DnX08DPvGg5fdV59gqcDKZGk9HbpE7GIz+3KB61fr8z6brqG43TfKyBregqVk+x6S/VuHp+x7OktPXfKdahds1iToqOErVUs/5hStl/vr6Mj8SfOS1VOKtnNAOns+dpwll6pFP7jkc7jRHxPI4830rU1TDoxuPJbOneShTbmLVn8zOSH1TTofacblQf6cePWK+hXTW0p7oGbt48IDbkds+Hj8CT8fpMnpKx5Oqop7ahoGsx1aOkbZJ1Q//QqMJ80IBHXG9sM+2pZdI11Uila3rpVFNLu9rXruomaYoOUCvoyfzAuB+obxZMdexPDT3T53O0ntr+l5QJrPSdrwYUJJO8p9poOa7UH1v82F6GQQ39bJDhmARqBO36mXrA8QkJJrDs7HLg8qWOdJSO2tqQIdFTtdTVkbPx1E4906mn7atnfPXUP4XS83RWZHF50mVbmGOeIou8RMlyc4ULRBTJsOhyNpAjT8F6RZYoMsMsJea4SJll5lmwzP2Ii5bDffHvSnqe3X3CuTkWyLNCgWWKXGDWHreruyu8ZPSbbDIb6gZzlFlinnXKXGbG+F4ErvIy8BpwhVdZY/WEnK9PfV+yx92uSmSy/3O5LVfI/YMlLpul99XWgcX4VvDjc2UfJaqrZVFgoEPDnXnBcTSeubahjhrmQ92pGbeDi/iGY7/bBP7qamvfEDDyXZs/6UmTXCjWnuXvgXo6sJ3dKSm3AV8+D06g2SH3FAlsnefBEDlUx94WDwJNSw1rOz6+qumiSpgbr7QbxZjPsPu+Os5DFAernF+37aCh+BQPOZ5r/D3ES+xbd6bjOBl76XmKs4W6VhPnwe5G5LPQKFOHWPysSHiMjylNxKfOtp6lAWv7ZuVBysk4l5wj3p7O68+N1OqYdpouS0+MD1Nu47NOVcPZc8oLQq4x2fztaOBRkpJkyLHJFYsvb5LlLd6lxCM+Z52ITW5bVHIloswsWYtq7q8kazM5shRC5LtAiUVmmeP/UfLkQ/SMQkwjfV9IqRZDXSLDJkWy9p+U5yIVVu0hxL4VazfYYDXUS6yxzgJl5lhn/kxOShZ/J4uPxeOybA8UKJCJ7jqdRY+jv1N0MVUNh0Pz0u5xL37BsvNLaFVT7QSuRvd1h4m+js5xLzu57652vR9P7Du+3/ZdZJpaM7oJ11VX0926j825G5r7W5y1/9J74b/U/xdHbLNEPmTf48VlYYdTn0kdbq6b1UZI8e9SSu++Xc0RsUjBsrdDtcPuvD3lgIgFa1dYYT7UVS6arR3WlslTpvwT3tJs1AB4nB2KMQqAMBAE584gQSxT2QmC4APUB4iVpR9IpYFglf9HkmKZgVkE6FjYaY7zunHRpw+XXh9wGICcKS+J4fHYYnWmVsEiDJVKS8+KMrGhzAjC+AOM6wn/) format('woff');}
+@font-face{font-family:'Fragline UI';font-weight:600;font-style:normal;font-display:block;src:url(data:font/woff;base64,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) format('woff');}
+/*FONTS-END*/
+:root {
+	--bg: #080a12;
+	--cyan: #39e1ff;
+	--pink: #ff3d81;
+	--gold: #ffc93c;
+	--text: #e8f0ff;
+	--muted: rgba(232, 240, 255, 0.6);
+	--faint: rgba(232, 240, 255, 0.35);
+	--ui: 'Fragline UI', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--title: 'Fragline Title', 'Fragline UI', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background: var(--bg);
+	color: var(--text);
+	touch-action: none;
+	overscroll-behavior: none;
+}
+#canvas {
+	display: block;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+#canvas:focus { outline: none; }
+
+/* ---------- loading screen ---------- */
+#fl-boot {
+	position: fixed;
+	inset: 0;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 24px 16px;
+	box-sizing: border-box;
+	font-family: var(--ui);
+	background:
+		radial-gradient(ellipse 70% 55% at 50% 42%, rgba(57, 225, 255, 0.10), transparent 70%),
+		radial-gradient(ellipse 40% 30% at 85% 90%, rgba(255, 61, 129, 0.07), transparent 70%),
+		var(--bg);
+	transition: opacity 0.45s ease, visibility 0.45s;
+	user-select: none;
+	-webkit-user-select: none;
+	overflow: hidden;
+}
+#fl-boot.fl-out { opacity: 0; visibility: hidden; pointer-events: none; }
+/* Perspective floor grid + slow scan line: pure CSS, no extra canvas (Godot takes the first canvas). */
+#fl-boot::before {
+	content: '';
+	position: absolute;
+	left: -50%;
+	right: -50%;
+	bottom: -10%;
+	height: 55%;
+	background-image:
+		linear-gradient(rgba(57, 225, 255, 0.16) 1px, transparent 1px),
+		linear-gradient(90deg, rgba(57, 225, 255, 0.16) 1px, transparent 1px);
+	background-size: 64px 64px;
+	transform: perspective(420px) rotateX(62deg);
+	transform-origin: 50% 0;
+	-webkit-mask-image: linear-gradient(to bottom, transparent, #000 40%);
+	mask-image: linear-gradient(to bottom, transparent, #000 40%);
+	animation: fl-grid 3.2s linear infinite;
+	pointer-events: none;
+}
+#fl-boot::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+	pointer-events: none;
+}
+@keyframes fl-grid { to { background-position: 0 64px, 0 64px; } }
+
+.fl-stack {
+	position: relative;
+	z-index: 1;
+	width: min(560px, 100%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+}
+.fl-logo {
+	font-family: var(--title);
+	font-weight: 700;
+	font-size: clamp(52px, 13vw, 128px);
+	line-height: 1;
+	letter-spacing: 0.04em;
+	margin: 0 0 0 0.04em;
+	color: #fff;
+	-webkit-text-stroke: 0.035em var(--cyan);
+	paint-order: stroke fill;
+	text-shadow:
+		0 0 0.06em rgba(57, 225, 255, 0.9),
+		0 0 0.22em rgba(57, 225, 255, 0.55),
+		0 0 0.6em rgba(57, 225, 255, 0.35);
+	animation: fl-flicker 6s infinite;
+	white-space: nowrap;
+}
+.fl-logo span {            /* two-tone, like the in-game menu logo */
+	color: var(--cyan);
+	-webkit-text-stroke-color: #b9f3ff;
+}
+@keyframes fl-flicker {
+	0%, 92%, 100% { opacity: 1; }
+	93% { opacity: 0.72; }
+	94% { opacity: 1; }
+	96% { opacity: 0.85; }
+}
+.fl-tag {
+	margin-top: 14px;
+	font-size: clamp(11px, 2.6vw, 14px);
+	letter-spacing: 0.32em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+.fl-tag b { color: var(--cyan); font-weight: 600; }
+
+.fl-load { width: 100%; margin-top: clamp(28px, 7vh, 56px); }
+.fl-bar {
+	position: relative;
+	height: 6px;
+	border-radius: 3px;
+	background: rgba(57, 225, 255, 0.12);
+	box-shadow: inset 0 0 0 1px rgba(57, 225, 255, 0.18);
+	overflow: hidden;
+}
+.fl-fill {
+	position: absolute;
+	inset: 0;
+	transform-origin: 0 50%;
+	transform: scaleX(0);
+	background: linear-gradient(90deg, #1aa6c8, var(--cyan) 70%, #c9f6ff);
+	box-shadow: 0 0 14px rgba(57, 225, 255, 0.8);
+	transition: transform 0.25s ease-out;
+}
+.fl-bar::after {           /* travelling shimmer */
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 30%;
+	left: -30%;
+	background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+	animation: fl-shimmer 1.6s ease-in-out infinite;
+	mix-blend-mode: overlay;
+}
+.fl-indeterminate .fl-fill { transform: scaleX(1) !important; opacity: 0.55; }
+.fl-indeterminate .fl-bar::after { animation-duration: 0.9s; mix-blend-mode: normal; }
+@keyframes fl-shimmer { to { left: 100%; } }
+.fl-meta {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 10px;
+	font-size: 13px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+.fl-pct { color: var(--cyan); font-weight: 600; }
+.fl-mb { color: var(--faint); margin-left: 8px; }
+
+.fl-tip {
+	margin-top: clamp(22px, 5vh, 40px);
+	min-height: 3em;
+	font-size: clamp(14px, 3.4vw, 17px);
+	line-height: 1.45;
+	color: var(--text);
+	transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.fl-tip.fl-swap { opacity: 0; transform: translateY(4px); }
+.fl-tip-k {
+	display: inline-block;
+	margin-right: 10px;
+	padding: 1px 7px;
+	border-radius: 3px;
+	font-size: 11px;
+	letter-spacing: 0.2em;
+	color: var(--bg);
+	background: var(--cyan);
+	vertical-align: 2px;
+}
+.fl-keys {
+	width: min(820px, calc(100vw - 32px));
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px 16px;
+	margin-top: 18px;
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+.fl-keys span { white-space: nowrap; }
+kbd {
+	display: inline-block;
+	min-width: 1.1em;
+	margin-right: 5px;
+	padding: 2px 6px;
+	border: 1px solid rgba(57, 225, 255, 0.45);
+	border-bottom-width: 2px;
+	border-radius: 4px;
+	font: 600 11px/1.3 var(--ui);
+	color: var(--text);
+	background: rgba(57, 225, 255, 0.07);
+	text-align: center;
+}
+.fl-foot {
+	position: absolute;
+	z-index: 1;
+	bottom: 14px;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font-size: 11px;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	color: var(--faint);
+}
+
+/* ---------- error card ---------- */
+.fl-error {
+	display: none;
+	width: 100%;
+	margin-top: clamp(24px, 6vh, 48px);
+	padding: 20px 22px;
+	box-sizing: border-box;
+	border: 1px solid rgba(255, 61, 129, 0.55);
+	border-radius: 10px;
+	background: rgba(255, 61, 129, 0.08);
+	box-shadow: 0 0 30px rgba(255, 61, 129, 0.12);
+	text-align: left;
+	user-select: text;
+	-webkit-user-select: text;
+}
+.fl-error h2 {
+	margin: 0 0 6px;
+	font: 700 18px/1.3 var(--title);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--pink);
+}
+.fl-error p { margin: 0 0 10px; font-size: 15px; line-height: 1.45; color: var(--text); }
+.fl-error ul { margin: 0 0 14px; padding-left: 20px; font-size: 14px; line-height: 1.55; color: var(--muted); }
+.fl-error code { font-size: 13px; color: var(--cyan); }
+.fl-error details { font-size: 12px; color: var(--faint); margin-bottom: 14px; }
+.fl-error details pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; }
+.fl-btn {
+	font: 600 14px/1 var(--ui);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--cyan);
+	background: rgba(57, 225, 255, 0.1);
+	border: 1px solid var(--cyan);
+	border-radius: 6px;
+	padding: 11px 20px;
+	cursor: pointer;
+}
+.fl-btn:hover, .fl-btn:focus-visible { background: rgba(57, 225, 255, 0.22); outline: none; }
+#fl-boot.fl-failed .fl-load, #fl-boot.fl-failed .fl-tip, #fl-boot.fl-failed .fl-keys { display: none; }
+#fl-boot.fl-failed .fl-error { display: block; }
+#fl-boot.fl-failed .fl-logo { animation: none; }
+
+/* ---------- click-to-play gate (over the live menu) ---------- */
+#fl-gate {
+	position: fixed;
+	inset: 0;
+	z-index: 9;
+	display: none;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	font-family: var(--ui);
+	background: radial-gradient(ellipse at center, rgba(8, 10, 18, 0.55), rgba(8, 10, 18, 0.85));
+	cursor: pointer;
+	transition: opacity 0.3s ease;
+	user-select: none;
+	-webkit-user-select: none;
+}
+#fl-gate.fl-on { display: flex; }
+#fl-gate.fl-out { opacity: 0; pointer-events: none; }
+.fl-gate-cta {
+	margin-top: 10px;
+	padding: 14px 34px;
+	border: 2px solid var(--cyan);
+	border-radius: 8px;
+	font: 700 clamp(16px, 3.6vw, 22px)/1 var(--title);
+	letter-spacing: 0.24em;
+	color: var(--cyan);
+	background: rgba(57, 225, 255, 0.08);
+	box-shadow: 0 0 24px rgba(57, 225, 255, 0.35), inset 0 0 18px rgba(57, 225, 255, 0.15);
+	animation: fl-pulse 1.6s ease-in-out infinite;
+}
+.fl-gate-sub { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+@keyframes fl-pulse {
+	0%, 100% { box-shadow: 0 0 18px rgba(57, 225, 255, 0.3), inset 0 0 14px rgba(57, 225, 255, 0.12); }
+	50% { box-shadow: 0 0 36px rgba(57, 225, 255, 0.6), inset 0 0 22px rgba(57, 225, 255, 0.25); }
+}
+
+@media (pointer: coarse) { .fl-keys { display: none; } }
+@media (max-width: 520px) { .fl-tag { letter-spacing: 0.16em; } }
+@media (max-height: 460px) {
+	.fl-logo { font-size: clamp(40px, 10vw, 80px); }
+	.fl-tag { margin-top: 8px; }
+	.fl-load { margin-top: 18px; }
+	.fl-tip { margin-top: 14px; min-height: 0; }
+	.fl-keys, .fl-foot { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	#fl-boot::before, .fl-logo, .fl-bar::after, .fl-gate-cta { animation: none; }
+	.fl-tip, .fl-fill { transition: none; }
+}
+</style>
+$GODOT_HEAD_INCLUDE
+</head>
+<body>
+<canvas id="canvas">Your browser does not support the canvas tag.</canvas>
+
+<noscript>
+	<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#080a12;color:#e8f0ff;font:16px system-ui,sans-serif;padding:24px;text-align:center">
+		FRAGLINE needs JavaScript. Please enable it and reload.
+	</div>
+</noscript>
+
+<div id="fl-boot" role="status" aria-live="polite">
+	<div class="fl-stack">
+		<h1 class="fl-logo" aria-label="FRAGLINE">FRAG<span>LINE</span></h1>
+		<div class="fl-tag">2D arena combat <b>&middot;</b> a tribute to Unreal Flash</div>
+
+		<div class="fl-load" id="fl-load">
+			<div class="fl-bar"><div class="fl-fill" id="fl-fill"></div></div>
+			<div class="fl-meta">
+				<span id="fl-phase">Connecting&hellip;</span>
+				<span><span class="fl-pct" id="fl-pct"></span><span class="fl-mb" id="fl-mb"></span></span>
+			</div>
+		</div>
+
+		<div class="fl-tip" id="fl-tip"><span class="fl-tip-k">TIP</span><span id="fl-tip-text">Press X in a match for X-Ray vision: see what the bots see.</span></div>
+
+		<div class="fl-keys" aria-label="Controls">
+			<span><kbd>WASD</kbd>/<kbd>&larr;&rarr;</kbd> move</span>
+			<span><kbd>Space</kbd>jump</span>
+			<span><kbd>Shift</kbd>dodge</span>
+			<span><kbd>LMB</kbd>/<kbd>RMB</kbd> fire</span>
+			<span><kbd>X</kbd>X-Ray</span>
+			<span><kbd>Tab</kbd>scores</span>
+		</div>
+
+		<div class="fl-error" id="fl-error" role="alert">
+			<h2 id="fl-err-title">Can&rsquo;t start the game</h2>
+			<p id="fl-err-text"></p>
+			<ul id="fl-err-tips"></ul>
+			<details id="fl-err-details"><summary>Technical details</summary><pre id="fl-err-raw"></pre></details>
+			<button class="fl-btn" type="button" id="fl-retry">Try again</button>
+		</div>
+	</div>
+	<div class="fl-foot">Made with Godot 4.7 &middot; WebGL 2</div>
+</div>
+
+<div id="fl-gate" role="button" tabindex="0" aria-label="Click to play">
+	<div class="fl-gate-cta" id="fl-gate-cta">CLICK TO PLAY</div>
+	<div class="fl-gate-sub" id="fl-gate-sub">or press any key</div>
+</div>
+
+<script src="$GODOT_URL"></script>
+<script>
+(function () {
+	'use strict';
+	var $ = function (id) { return document.getElementById(id); };
+	var boot = $('fl-boot');
+	var load = $('fl-load');
+	var fill = $('fl-fill');
+	var phase = $('fl-phase');
+	var pct = $('fl-pct');
+	var mb = $('fl-mb');
+	var canvas = $('canvas');
+	var params = new URLSearchParams(location.search);
+	var touch = (navigator.maxTouchPoints || 0) > 0 && window.matchMedia && matchMedia('(pointer: coarse)').matches;
+
+	// ---------- rotating tips ----------
+	var TIPS = [
+		['k', 'WASD or the arrow keys move. Space jumps; press it again in the air to double jump.'],
+		['k', 'Shift dodge-rolls. Use it to slip past rockets and flak.'],
+		['*', 'Every weapon has an alt-fire on the right mouse button. Try them all.'],
+		['k', 'Press X for X-Ray vision: see what the bots see, their routes and targets.'],
+		['k', 'Hold Tab to see the scoreboard.'],
+		['k', 'Swap weapons with 1–9, the mouse wheel, or Q / E.'],
+		['*', 'Rocket jump: fire a rocket at your feet as you jump.'],
+		['*', 'Shock combo: fire the alt-fire ball, then hit it with the beam.'],
+		['k', 'Press S to drop through thin platforms. You can grab ladders mid-air.'],
+		['*', 'Host LAN shows a 6-letter room code. Up to 8 players connect browser to browser.'],
+		['*', 'Bots come in five skill levels, from Rookie to Godlike.'],
+		['*', 'Sniper headshots deal extra damage, and the alt-fire shot pierces walls.'],
+		['*', 'Spawn rooms are no-fight zones, and you get a short shield as you leave.'],
+		['k', 'Training Room: press T for the panel with dummies, god mode and infinite ammo.'],
+	].filter(function (t) { return !(touch && t[0] === 'k'); }).map(function (t) { return t[1]; });
+	var tipEl = $('fl-tip');
+	var tipText = $('fl-tip-text');
+	var tipIdx = Math.floor(Math.random() * TIPS.length);
+	function nextTip() {
+		tipEl.classList.add('fl-swap');
+		setTimeout(function () {
+			tipIdx = (tipIdx + 1) % TIPS.length;
+			tipText.textContent = TIPS[tipIdx];
+			tipEl.classList.remove('fl-swap');
+		}, 350);
+	}
+	tipText.textContent = TIPS[tipIdx];
+	var tipTimer = setInterval(nextTip, 4200);
+
+	// ---------- progress ----------
+	var lastProgressAt = Date.now();
+	var lastLoaded = 0;
+	var downloaded = false;
+	function fmtMB(b) { return (b / 1048576).toFixed(1); }
+	function onProgress(current, total) {
+		if (current !== lastLoaded) { lastLoaded = current; lastProgressAt = Date.now(); }
+		if (current > 0 && total > 0) {
+			var f = Math.min(1, current / total);
+			fill.style.transform = 'scaleX(' + f + ')';
+			pct.textContent = Math.floor(f * 100) + '%';
+			mb.textContent = fmtMB(current) + ' / ' + fmtMB(total) + ' MB';
+			if (f >= 1 && !downloaded) {
+				downloaded = true;
+				load.classList.add('fl-indeterminate');
+				phase.textContent = 'Starting engine…';
+				mb.textContent = '';
+			} else if (!downloaded) {
+				phase.textContent = 'Loading';
+			}
+		} else {
+			phase.textContent = 'Loading';
+		}
+	}
+	// Gentle nudge if the network stalls (venue Wi-Fi).
+	var stallTimer = setInterval(function () {
+		if (!downloaded && Date.now() - lastProgressAt > 12000) {
+			phase.textContent = 'Slow network… still loading';
+		}
+	}, 2000);
+
+	// ---------- errors ----------
+	function fail(kind, raw) {
+		clearInterval(tipTimer);
+		clearInterval(stallTimer);
+		var title = 'Can’t start the game';
+		var text = '';
+		var tips = [];
+		if (kind === 'webgl') {
+			title = 'WebGL 2 is not available';
+			text = 'FRAGLINE draws with WebGL 2, and this browser has it turned off or doesn’t support it.';
+			tips = [
+				'Use a recent <b>Chrome</b>, <b>Edge</b>, <b>Firefox</b> or <b>Safari 15+</b>.',
+				'Turn on hardware acceleration (Chrome/Edge: <code>Settings → System → Use graphics acceleration</code>), then restart the browser.',
+				'Update your graphics drivers, or try another device.',
+				'Check <code>chrome://gpu</code>: “WebGL2” should say “Hardware accelerated”.',
+			];
+		} else if (kind === 'features') {
+			text = 'This browser is missing features the game needs.';
+			tips = ['Update your browser, or try the latest Chrome, Edge or Firefox.'];
+		} else if (kind === 'download') {
+			title = 'Download interrupted';
+			text = 'The game files couldn’t be downloaded from the host.';
+			tips = [
+				'Check that you’re on the same network as the host machine.',
+				'Make sure the server (<code>tools/serve.py</code>) is still running.',
+				'Then press <b>Try again</b>.',
+			];
+		} else if (kind === 'memory') {
+			title = 'Not enough memory';
+			text = 'The browser couldn’t reserve enough memory to start the game.';
+			tips = ['Close other tabs and try again.', 'On phones, a desktop or laptop browser works best.'];
+		} else {
+			text = 'Something went wrong while starting FRAGLINE.';
+			tips = ['Reload the page. If it keeps happening, try another browser.'];
+		}
+		$('fl-err-title').textContent = title;
+		$('fl-err-text').textContent = text;
+		$('fl-err-tips').innerHTML = tips.map(function (t) { return '<li>' + t + '</li>'; }).join('');
+		var rawText = raw ? String(raw && raw.message ? raw.message : raw) : '';
+		$('fl-err-raw').textContent = rawText;
+		$('fl-err-details').style.display = rawText ? '' : 'none';
+		boot.classList.remove('fl-out');
+		boot.classList.add('fl-failed');
+		$('fl-retry').focus();
+	}
+	$('fl-retry').addEventListener('click', function () { location.reload(); });
+	function classify(err) {
+		var m = String(err && err.message ? err.message : err);
+		if (/Failed loading file|NetworkError|Failed to fetch|network/i.test(m)) return 'download';
+		if (/memory|RangeError|Out of memory|OOM/i.test(m)) return 'memory';
+		if (/webgl/i.test(m)) return 'webgl';
+		return 'generic';
+	}
+
+	// ---------- click-to-play gate ----------
+	// Browsers keep audio muted until the first click or key press. The gate makes that first
+	// gesture deliberate (music starts with it) and puts keyboard focus on the game canvas.
+	var gate = $('fl-gate');
+	function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { canvas.focus(); } }
+	function openGate() {
+		var active = navigator.userActivation && navigator.userActivation.hasBeenActive;
+		// Skipped for automated browsers (tests click straight into the game), ?gate=0, or when the
+		// player already clicked/typed during loading (audio is unlocked then). ?gate=1 forces it.
+		if (params.get('gate') !== '1' && (params.get('gate') === '0' || navigator.webdriver || active)) { focusGame(); return; }
+		if (touch) { $('fl-gate-cta').textContent = 'TAP TO PLAY'; $('fl-gate-sub').textContent = 'landscape works best'; }
+		gate.classList.add('fl-on');
+		var done = false;
+		function dismiss(e) {
+			if (done) return;
+			done = true;
+			if (e && e.type !== 'keydown') e.preventDefault();
+			gate.classList.add('fl-out');
+			focusGame();
+			setTimeout(function () { gate.remove(); }, 320);
+			document.removeEventListener('keydown', dismiss, true);
+		}
+		gate.addEventListener('pointerup', dismiss);
+		gate.addEventListener('click', dismiss);
+		document.addEventListener('keydown', dismiss, true);
+	}
+
+	// ---------- boot ----------
+	if (typeof Engine === 'undefined') {
+		fail('download', 'index.js failed to load');
+		return;
+	}
+	var engine = new Engine(GODOT_CONFIG);
+	var missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
+	// This is a no-threads build: plain HTTP on a LAN address (not a "secure context") runs fine,
+	// so that check is only a warning here. LAN play over http://192.168.x.x depends on this.
+	missing = missing.filter(function (m) {
+		if (/^Secure Context/.test(m)) { console.warn('[FRAGLINE] Not a secure context (plain HTTP on a LAN IP); continuing.'); return false; }
+		return true;
+	});
+	if (missing.length) {
+		var webgl = missing.some(function (m) { return /WebGL2/.test(m); });
+		fail(webgl ? 'webgl' : 'features', missing.join('\n'));
+		return;
+	}
+	phase.textContent = 'Loading';
+	engine.startGame({ onProgress: onProgress }).then(function () {
+		clearInterval(tipTimer);
+		clearInterval(stallTimer);
+		fill.style.transform = 'scaleX(1)';
+		openGate();
+		boot.classList.add('fl-out');
+		setTimeout(function () { boot.remove(); }, 500);
+	}, function (err) {
+		console.error(err);
+		fail(classify(err), err);
+	});
+}());
+</script>
+</body>
+</html>

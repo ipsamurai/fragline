@@ -156,9 +156,9 @@ func _sync() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("training"):
+	if event.is_action_pressed("training") and not world.paused:
 		_panel.visible = not _panel.visible
-		world.input_blocked = _panel.visible
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if _panel.visible else Input.MOUSE_MODE_HIDDEN
+		world.panel_open = _panel.visible
+		world.refresh_input_state()
 		_sync()
 		get_viewport().set_input_as_handled()

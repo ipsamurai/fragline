@@ -113,7 +113,7 @@ func _run() -> void:
 	var uses := {}
 	for def in Maps.LIST:
 		uses[def.music] = uses.get(def.music, 0) + 1
-	_check("each combat track is shared by exactly two arenas", uses.size() == 3 and uses.values().all(func(n: int) -> bool: return n == 2))
+	_check("each combat track is shared by at least two arenas", uses.size() == 3 and uses.values().all(func(n: int) -> bool: return n >= 2))
 	main.start_match({"map": 2, "bots": 1, "skill": 1, "frags": 10, "minutes": 0})
 	await _frames(5)
 	_check("a match plays its arena's track", Music.current == Maps.LIST[2].music and Music._players[Music._active].playing)

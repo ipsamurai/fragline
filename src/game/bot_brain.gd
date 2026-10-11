@@ -20,11 +20,14 @@ const SKILLS := [
 ]
 const SIGHT := 1100.0
 const MEMORY := 3.0                     # seconds an unseen enemy stays "known"
+const LINK_ACTIONS := ["path WALK", "path JUMP", "path FALL", "path DROP", "path CLIMB", "path PAD"]
+const PICKUP_LABELS := {"h": "HEAL UP", "H": "MEGA HEALTH", "a": "ARMOR UP", "D": "DAMAGE AMP"}
 
 var skill: Dictionary
 var target: Player                      # current enemy (may be out of sight but remembered)
 var target_visible := false
 var action := ""                        # what the bot did last step (for debugging / tests)
+var goal_label := ""                    # why it's going where it's going (X-Ray overlay)
 
 var _p: Player
 var _world: Node
@@ -59,8 +62,12 @@ func update(p: Player, delta: float) -> void:
 	_p = p
 	_world = p.world
 	_nav = _world.get_nav()
+	if not is_instance_valid(target):        # none, or its player left (a freed object also == null)
+		target = null
+		target_visible = false
 	p.in_move = 0.0
 	p.in_jump = false
+	p.in_jump_held = false
 	p.in_down = false
 	p.in_down_held = false
 	p.in_dodge = false
@@ -136,6 +143,7 @@ func _choose_goal() -> void:
 	var best_score := -1.0
 	var best_node := -1
 	var best_enemy := false
+	var best_label := ""
 	for it: Dictionary in _world.pickups.items:
 		if not it.active:
 			continue
@@ -147,6 +155,7 @@ func _choose_goal() -> void:
 			best_score = s
 			best_node = _nav.nearest(it.pos + Vector2(0, Level.T * 0.5 - Player.HALF.y - 1))
 			best_enemy = false
+			best_label = PICKUP_LABELS.get(it.type, "") if it.type != "w" else "GET " + str(Weapons.LIST[it.wid].name).to_upper()
 	if target:
 		var hunger := 55.0 if _p.health > 40 else 15.0
 		var s := hunger / (1.0 + here.distance_to(_last_seen) / 900.0)
@@ -154,12 +163,15 @@ func _choose_goal() -> void:
 			best_score = s
 			best_node = _nav.nearest(_last_seen)
 			best_enemy = true
+			best_label = "HUNT " + target.display_name.to_upper()
 	if best_node < 0 or best_score < 4.0:
 		if _goal < 0 or _path_i >= _path.size():
 			best_node = _roam_node()
 		else:
 			best_node = _goal
 		best_enemy = false
+		best_label = "ROAM" if best_node != _goal or goal_label == "" else goal_label
+	goal_label = best_label
 	if best_node != _goal or _replan_t <= 0.0 or _off_path():
 		_set_goal(best_node, best_enemy)
 
@@ -230,7 +242,7 @@ func _follow_path() -> void:
 			_set_goal(_goal, _goal_is_enemy)
 		return
 	var tp := _nav.pos_of(next)
-	action = "path " + NavGraph.Link.keys()[kind] + " -> " + str(_nav.cell_of_node(next))
+	action = LINK_ACTIONS[kind]
 	var dx := tp.x - pos.x
 	if _trap_ahead(tp):
 		return                          # wait for the laser / vent to switch off
@@ -438,8 +450,9 @@ func _fight(delta: float) -> void:
 		if _p.weapon == Weapons.ROCKET and target.is_on_floor() and skill.lead > 0.8:
 			aim_at.y += 18.0            # rockets at the feet: splash is harder to dodge
 	# Shock combo: shoot a ball, then beam it when it's near the target.
-	var ball := _own_shock_ball()
-	if ball and ball.pos.distance_to(target.global_position) < 130.0:
+	var ball := _own_shock_ball() if _p.weapon == Weapons.SHOCK else null
+	var near := ball != null and ball.pos.distance_to(target.global_position) < 130.0
+	if near:
 		aim_at = ball.pos
 	_wobble = lerpf(_wobble, randf_range(-1.0, 1.0), 0.08)
 	var desired: float = (aim_at - from).angle() + _wobble * skill.aim_err
@@ -447,8 +460,8 @@ func _fight(delta: float) -> void:
 	var ready: bool = _world.clock - _seen_since >= skill.reaction
 	if not ready or absf(angle_difference(_p.aim, desired)) > 0.15:
 		return
-	if ball:
-		_p.in_fire = ball.pos.distance_to(target.global_position) < 130.0
+	if ball and (near or _combo_t < 1.0):   # wait briefly for the ball, not until it expires
+		_p.in_fire = near
 		return
 	if _p.weapon == Weapons.SHOCK and skill.combo and _combo_t > 2.5 and from.distance_to(aim_at) > 260.0:
 		_combo_t = 0.0
@@ -465,3 +478,29 @@ func _own_shock_ball() -> Projectiles.Proj:
 		if pr.key == "shock_ball" and pr.owner_eid == _p.eid:
 			return pr
 	return null
+
+
+# --- introspection (X-Ray overlay) -------------------------------------------------------
+
+## What the bot is doing right now, in a few words.
+func intent() -> String:
+	if _was_engaged and target:
+		return "FIGHT " + target.display_name.to_upper()
+	return goal_label
+
+
+## World positions of the path still ahead of the bot.
+func path_ahead() -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if _nav == null:
+		return out
+	for i in range(_path_i, _path.size()):
+		out.append(_nav.pos_of(_path[i]))
+	return out
+
+
+## 0..1: how far the bot is through its reaction time on the current target (1 = can fire).
+func reaction_progress() -> float:
+	if target == null or not target_visible or _world == null:
+		return 0.0
+	return clampf((_world.clock - _seen_since) / maxf(skill.reaction, 0.01), 0.0, 1.0)

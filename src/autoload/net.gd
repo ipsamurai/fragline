@@ -17,6 +17,7 @@ const PROTOCOL := 1
 const MAX_PLAYERS := 8
 const POLL_FAST := 0.25
 const POLL_SLOW := 1.0
+const CONNECT_TIMEOUT := 15.0          # client: give up if the host never connects
 ## No STUN/TURN on the LAN: devices connect over their local addresses.
 ## Internet play would add STUN/TURN servers here.
 const ICE := {"iceServers": []}
@@ -38,6 +39,8 @@ var _rtc: WebRTCMultiplayerPeer
 var _conns := {}                       # peer id -> WebRTCPeerConnection
 var _poll_t := 0.0
 var _poll_busy := false
+var _session := 0                      # bumped by close(): a host()/join() in flight sees it and bails
+var _connect_left := -1.0              # client: seconds left to reach the host (< 0 = not waiting)
 
 
 func _ready() -> void:
@@ -62,11 +65,17 @@ func _signal_base() -> String:
 
 # --- hosting / joining ------------------------------------------------------------------
 
-## Returns "" on success, or an error message.
+## Returns "" on success, or an error message. If close() (or another host/join) ran while it was
+## waiting it bails and returns "" without hosting: check `role` before showing the lobby.
 func host(match_config: Dictionary) -> String:
 	close()
+	var session := _session
 	_base = _signal_base()
 	var r := await _post("host", {})
+	if session != _session:
+		if not r.has("error"):
+			_post("leave", {"code": r.get("code", ""), "token": r.get("token", "")})   # drop the unwanted room
+		return ""
 	if r.has("error"):
 		return "Couldn't create a room: %s" % r.error
 	code = r.code
@@ -79,16 +88,42 @@ func host(match_config: Dictionary) -> String:
 	multiplayer.multiplayer_peer = _rtc
 	lobby = {1: {"name": Settings.player_name, "look": Settings.look()}}
 	var info := await _get_info()
+	if session != _session:
+		return ""                                           # close() already left the room
 	lan_url = info.get("lan", _base)
 	_set_title()
 	lobby_changed.emit()
 	return ""
 
 
+## Returns "" on success or when cancelled (whoever called close() already moved the UI on),
+## else an error message.
+const CODE_ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # matches tools/serve.py
+const CODE_LEN := 6
+
+
+## True for a well-formed room code (6 characters from the server's alphabet).
+static func valid_code(c: String) -> bool:
+	if c.length() != CODE_LEN:
+		return false
+	for ch in c:
+		if not CODE_ALPHABET.contains(ch):
+			return false
+	return true
+
+
 func join(room_code: String) -> String:
 	close()
+	room_code = room_code.strip_edges().to_upper()
+	if not valid_code(room_code):
+		return "That room code doesn't look right (6 letters and digits)."
+	var session := _session
 	_base = _signal_base()
-	var r := await _post("join", {"code": room_code.strip_edges().to_upper()})
+	var r := await _post("join", {"code": room_code})
+	if session != _session:
+		if not r.has("error"):
+			_post("leave", {"code": room_code.strip_edges().to_upper(), "token": r.get("token", "")})
+		return ""
 	if r.has("error"):
 		return "Couldn't join: %s" % r.error
 	code = room_code.strip_edges().to_upper()
@@ -98,12 +133,15 @@ func join(room_code: String) -> String:
 	_rtc = WebRTCMultiplayerPeer.new()
 	_rtc.create_client(my_id)
 	multiplayer.multiplayer_peer = _rtc
+	_connect_left = CONNECT_TIMEOUT
 	status_changed.emit("Connecting to the host…")
 	_set_title()
 	return ""
 
 
 func close() -> void:
+	_session += 1
+	_connect_left = -1.0
 	if role != Role.OFFLINE and code != "":
 		_post("leave", {"code": code, "token": _token})     # fire and forget
 	for c: WebRTCPeerConnection in _conns.values():
@@ -137,6 +175,11 @@ func join_link() -> String:
 func _process(delta: float) -> void:
 	if debug:
 		_publish_debug(delta)
+	if role == Role.CLIENT and _connect_left > 0.0:
+		_connect_left -= delta
+		if _connect_left <= 0.0:
+			_fail("Couldn't reach the host")
+			return
 	if role == Role.OFFLINE or _poll_busy:
 		return
 	_poll_t -= delta
@@ -152,8 +195,11 @@ func _process(delta: float) -> void:
 
 func _poll() -> void:
 	_poll_busy = true
+	var session := _session
 	var r := await _post("poll", {"code": code, "token": _token})
 	_poll_busy = false
+	if session != _session:
+		return                                              # reply belongs to a room we've left
 	if r.has("error"):
 		if role == Role.CLIENT and not _conns.has(1):
 			_fail("Lost the room: %s" % r.error)
@@ -261,6 +307,7 @@ func _set_title() -> void:
 
 func _on_peer_connected(id: int) -> void:
 	if role == Role.CLIENT and id == 1:
+		_connect_left = -1.0
 		status_changed.emit("Connected — waiting for the host")
 		c_hello.rpc_id(1, Settings.player_name, Settings.look(), PROTOCOL)
 
