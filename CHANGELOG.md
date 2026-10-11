@@ -43,6 +43,10 @@
 ### Docs
 - README rewritten for this release: features, controls, LAN and phone setup, URL parameters, performance, deployment.
 - New CHANGELOG.md, docs/ARCHITECTURE.md and SECURITY.md; CREDITS.md lists every audio file and its source; fresh screenshots.
+- 60-second trailer, `docs/media/fragline-trailer.mp4`, cut from real 1080p gameplay.
+
+### Tools
+- Native benchmark capture flags for footage: bots, mode, skill, seed, low gravity, no HUD, sound effects, time scale, full-size frame capture (`--size`, `--frames`, desktop only).
 
 ## 1.0.0 — 2026-10-11
 
