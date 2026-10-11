@@ -323,9 +323,6 @@ func show_play(mode := "") -> void:
 		b.set_pressed_no_signal(m[0] == _play_mode)
 		b.disabled = m[0] != "bots" and not lan_ok
 		modes.add_child(b)
-	var online := UiTheme.button("Internet  ·  coming soon", func() -> void: pass)
-	online.disabled = true
-	modes.add_child(online)
 	box.add_child(modes)
 	if not lan_ok:
 		box.add_child(UiTheme.label("LAN play runs in the browser build (desktop builds need the webrtc-native extension).", "Muted"))

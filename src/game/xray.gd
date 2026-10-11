@@ -148,7 +148,7 @@ func _draw_legend(view: Rect2, font: Font) -> void:
 		return
 	var z := get_viewport().get_canvas_transform().get_scale().x
 	var s := 1.0 / maxf(z, 0.01)
-	var p := view.position + Vector2(18, view.size.y - 30.0 * s - 18.0 * LINK_NAMES.size() * s)
+	var p := view.position + Vector2(18, view.size.y - (150.0 + 18.0 * LINK_NAMES.size()) * s)   # clear of the HUD's vitals panel
 	draw_set_transform(p, 0.0, Vector2(s, s))
 	_text(font, Vector2(0, 0), "X-RAY · bot navigation", 260, 13, UiTheme.ACCENT, HORIZONTAL_ALIGNMENT_LEFT)
 	for i in LINK_NAMES.size():
