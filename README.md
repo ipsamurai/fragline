@@ -9,7 +9,7 @@ A modern tribute to the Newgrounds classic *Unreal Flash*, built from scratch in
 ![Godot 4.7](https://img.shields.io/badge/Godot-4.7-478CBF?logo=godotengine&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Web%20%7C%20Desktop-0f172a)
 ![Multiplayer](https://img.shields.io/badge/LAN%20PvP-WebRTC%20P2P-22d3ee)
-![Game data](https://img.shields.io/badge/game%20data-~6%20MB-a855f7)
+![Game data](https://img.shields.io/badge/game%20data-~6.5%20MB-a855f7)
 ![Tests](https://img.shields.io/badge/tests-11%20headless%20suites-22c55e)
 
 ![FRAGLINE main menu over a live bot match](docs/screenshots/menu.jpg)
@@ -22,7 +22,7 @@ A modern tribute to the Newgrounds classic *Unreal Flash*, built from scratch in
 - **Locked 60 FPS on a budget laptop.** Measured in Chrome on an Intel i3-1215U with integrated Intel UHD graphics: every arena holds the display's refresh rate with 8 fighters, at about 40 draw calls a frame. See [Performance](#performance).
 - **See what's normally invisible.** Press **X** for X-Ray vision: the bots' navigation graph, each bot's planned route and goal, what it's trying to do ("GET ROCKET LAUNCHER", "HUNT VOLT"), who it's targeting, and respawn timers on taken items.
 - **Play on your phone.** The LAN lobby shows a QR code. Scan it, and the game opens in your phone's browser with twin-stick touch controls and aim assist.
-- **Small download.** The game data (art, levels, sound and music) is under 6 MB. Characters, levels and effects are drawn in code. Weapons use a CC0 pixel-art pack.
+- **Small download.** The game data (art, levels, sound and music) is about 6.5 MB. Characters, levels and effects are drawn in code. Weapons use a CC0 pixel-art pack.
 - **Bots that play properly.** Bots find their way around every arena using ladders, jump pads and drop-through floors. They pick up items, avoid traps, lead their shots and dodge. There are five skill levels, from Rookie to Godlike.
 - **LAN multiplayer with a room code.** Host a match and share a 6-character code. Up to 8 players connect directly to each other, browser to browser, over WebRTC.
 - **Tested.** Eleven headless test suites cover combat rules, regressions, menus, bot navigation, full bot matches on every arena, game modes, touch controls, the announcer, audio, sound hooks and match stats.

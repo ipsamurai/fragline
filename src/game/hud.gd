@@ -181,7 +181,8 @@ func on_death(victim: int, killer: int, wid: int) -> void:
 		_spree += 1
 		_multi = _multi + 1 if world.clock - _last_kill < MULTI_WINDOW else 1
 		_last_kill = world.clock
-		_sfx("frag", 0.0 if first_blood else -4.0)
+		if first_blood:
+			_sfx("frag")                                # other frags get world.gd's kill_confirm
 		var sub := "You fragged %s" % vname
 		var mi := mini(_multi, MULTI.size() - 1)
 		var done := false                              # the headline is taken; later callouts are voice-only

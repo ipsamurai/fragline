@@ -16,7 +16,7 @@ var selected := false:
 
 func _init(p_def: Dictionary) -> void:
 	def = p_def
-	custom_minimum_size = Vector2(232, 150)
+	custom_minimum_size = Vector2(232, 128)
 	focus_mode = Control.FOCUS_ALL
 	tooltip_text = def.desc
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

@@ -143,7 +143,7 @@ func show_main() -> void:
 	var hint := UiTheme.label("Press  X  for X-Ray vision: see what the bots see", "Muted")
 	hint.add_theme_color_override("font_color", Color(UiTheme.ACCENT, 0.85))
 	box.add_child(hint)
-	box.add_child(UiTheme.label("Playing as %s  ·  Esc goes back  ·  runs in any browser, ~6 MB, peer-to-peer LAN"
+	box.add_child(UiTheme.label("Playing as %s  ·  Esc goes back  ·  runs in any browser, ~6.5 MB, peer-to-peer LAN"
 			% Settings.player_name, "Muted"))
 	# Featured weapon, right side (the screen's MarginContainer overlays it on the column).
 	var featured := WeaponShowcase.new()
@@ -335,7 +335,7 @@ func show_play(mode := "") -> void:
 
 	box.add_child(UiTheme.label("ARENA", "Heading"))
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)
 	_cards.clear()
@@ -509,7 +509,8 @@ func show_lobby() -> void:
 		start.visible = hosting
 		var cfg: Dictionary = Net.config
 		if not cfg.is_empty():
-			status.text = "%s · %d bots (%s) · %d frags%s" % [Maps.LIST[clampi(int(cfg.map), 0, Maps.LIST.size() - 1)].name,
+			status.text = "%s · %s%s · %d bots (%s) · %d frags%s" % [Maps.LIST[clampi(int(cfg.map), 0, Maps.LIST.size() - 1)].name,
+					GameMode.name_of(int(cfg.get("mode", 0))), " · Low gravity" if cfg.get("lowgrav", false) else "",
 					int(cfg.bots), BOT_SKILL_NAMES[clampi(int(cfg.skill), 0, 4)], int(cfg.frags),
 					" · %d min" % int(cfg.minutes) if int(cfg.minutes) > 0 else ""]
 		for c in players.get_children():
@@ -569,10 +570,9 @@ func _copy_text(text: String) -> bool:
 		document.body.removeChild(a);
 		var c = document.getElementById('canvas') || document.querySelector('canvas');
 		if (c) { c.focus(); }
-		return ok;
+		return ok ? '1' : '0';
 	})(%s)""" % JSON.stringify(text)
-	var ok: Variant = JavaScriptBridge.eval(js, true)
-	return typeof(ok) == TYPE_BOOL and ok
+	return str(JavaScriptBridge.eval(js, true)) == "1"
 
 
 ## A short message across the top of the menu (connection errors, "host left"...).

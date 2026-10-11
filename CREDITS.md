@@ -10,17 +10,21 @@
   Kanji mode isn't used. The licence is in `addons/qr_code/LICENSE.md`.
 
 ## Audio
-- **Kenney** — *Sci-fi Sounds*, *Impact Sounds*, *Interface Sounds* — Creative Commons Zero (CC0)
-  — https://kenney.nl/assets
-  (The `.ogg` files in `assets/audio/` are renamed copies of a subset of these packs.)
 - **FREE FPS SFX Pack** by LMGLolo — https://lmglolo.itch.io/free-fps-sfx — CC BY-ND 4.0
-  (https://creativecommons.org/licenses/by-nd/4.0/) — used unmodified (format-converted for web playback only).
-  Files: `flak1-4`, `flak_pump`, `rocket1-4`, `rocket_loop`, `sniper1-3`, `explode1-4`, `death1-6`,
-  `step1-6`, `land`, `jump`, `low_ammo`, `fall_loop`, `equip_5` (`.wav`, byte-identical copies of the originals).
+  (https://creativecommons.org/licenses/by-nd/4.0/) — used unmodified (format-converted for web playback only,
+  always played at original pitch). Files: `flak1-4`, `flak_pump`, `rocket1-4`, `rocket_loop`, `redeemer`,
+  `sniper1-4`, `grenade1-4`, `shock_alt1-3`, `explode1-4`, `combo`, `nuke`, `death1-6`, `step1-6`, `land`, `jump`,
+  `low_ammo`, `fall_loop`, `equip_5`, `equip_7` (`.wav`, byte-identical copies of the originals).
 - **Snake's Authentic Gun Sounds And More** by SnakeF8 (F8 Studios) — https://f8studios.itch.io/snakes-authentic-gun-sounds
-  — free for commercial use, credit not required (per the itch.io page, 2026-10-11); credited with thanks;
-  some sounds trimmed/edited. Files: `pistol1-3`, `minigun1-3`, `grenade`, `flak_alt`, `equip_0-4`, `equip_6-8`,
-  `pickup_weapon`, `kill_confirm`, `headshot` (`.wav`; trimmed, faded, pitch-shifted, saturated or layered).
+  — free for commercial use, credit not required (per the itch.io page, 2026-10-11); credited with thanks.
+  Files: `pistol1-2`, `minigun1-2`, `pulse1-2`, `shock`, `flak_alt`, `equip_0-4`, `equip_6`, `equip_8`,
+  `pickup_weapon`, `kill_confirm`, `headshot` (`.wav`, byte-identical copies; Godot's importer trims the
+  silence at the start and end of these files so shots fire without delay).
+- **Kenney** — *Sci-fi Sounds*, *Impact Sounds*, *Interface Sounds* — Creative Commons Zero (CC0)
+  — https://kenney.nl/assets — menu clicks, item pickups, hit markers and other non-weapon sounds
+  (the `.ogg` files in `assets/audio/` are renamed copies of a subset of these packs).
+
+Every weapon sound comes from the two packs above; none are generated or synthesised.
 
 ## Music (all CC0 — public domain; credited with thanks)
 All tracks by **The Cynic Project / cynicmusic.com** (OpenGameArt):

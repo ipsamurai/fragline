@@ -201,7 +201,9 @@ func display_name(eid: int) -> String:
 
 
 func mode_text() -> String:
-	var parts := ["LAN Deathmatch" if world.net_role != Net.Role.OFFLINE else "Deathmatch"]
+	var parts := [("LAN " if world.net_role != Net.Role.OFFLINE else "") + GameMode.name_of(world.game_mode)]
+	if world.low_gravity:
+		parts.append("Low gravity")
 	if world.frag_limit > 0:
 		parts.append("%d frag limit" % world.frag_limit)
 	var t := roundi(match_seconds())

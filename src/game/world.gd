@@ -60,6 +60,7 @@ var ended := false
 var _winner_eid := 0
 var _killer_eid := 0                   # who fragged you last (the death cam follows them)
 var _last_death_pos := Vector2.ZERO
+var _last_death_clock := -1e9
 var _hitstop_until := 0                # msec (real time) when a kill's hit-pause ends
 const FINALE := 2.4                    # real seconds of slow-mo on the match-winning frag
 var _finale_t := 0.0
@@ -487,6 +488,7 @@ func apply_event(kind: Ev, a: Array) -> void:
 				_alive_dirty = true
 				fx.gibs(pos, victim.look, a[4])
 			_last_death_pos = pos
+			_last_death_clock = clock
 			if a[0] == my_eid and a[1] != my_eid:
 				_killer_eid = a[1]
 			elif a[1] == my_eid and a[0] != my_eid and _juice_allowed():
@@ -643,7 +645,7 @@ func apply_event(kind: Ev, a: Array) -> void:
 			ended = true
 			if _juice_allowed():
 				_finale_t = FINALE
-				_finale_pos = _last_death_pos
+				_finale_pos = _last_death_pos if clock - _last_death_clock < 1.0 else _cam_pos
 				_hitstop_until = 0
 				Engine.time_scale = 0.25
 			hud.show_end(a[0])

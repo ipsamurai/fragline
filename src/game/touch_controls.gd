@@ -75,9 +75,10 @@ static func _detect() -> bool:
 		return true
 	if q == "0":
 		return false
-	var coarse: Variant = JavaScriptBridge.eval(
-			"!!(navigator.maxTouchPoints > 0 && window.matchMedia && matchMedia('(pointer: coarse)').matches)", true)
-	return typeof(coarse) == TYPE_BOOL and coarse
+	# Return a string: a JS boolean doesn't reliably arrive as a GDScript bool through the bridge.
+	var coarse := str(JavaScriptBridge.eval(
+			"(navigator.maxTouchPoints > 0 && window.matchMedia && matchMedia('(pointer: coarse)').matches) ? '1' : '0'", true))
+	return coarse == "1"
 
 
 func _ready() -> void:
